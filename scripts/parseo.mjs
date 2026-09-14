@@ -235,3 +235,22 @@ export function calcularBrecha(oficial, blue) {
   if (o === null || b === null || o <= 0) return null;
   return +(((b / o) - 1) * 100).toFixed(1);
 }
+
+// --- fusión de históricos ----------------------------------------------------
+// La serie del servidor local (cada 10 min) y la del robot (cada hora) son la
+// misma medición a distinto ritmo. Se unen por marca de tiempo; ante un choque
+// gana el punto con más campos con dato, porque una corrida donde media fuente
+// falló no debe pisar a una completa.
+function completitud(punto) {
+  return Object.keys(punto).filter((k) => k !== 't' && punto[k] !== null && punto[k] !== undefined).length;
+}
+
+export function fusionarHistoricos(a, b, ahora = Date.now()) {
+  const porFecha = new Map();
+  for (const punto of [...(a || []), ...(b || [])]) {
+    if (!punto || typeof punto.t !== 'string') continue;
+    const previo = porFecha.get(punto.t);
+    if (!previo || completitud(punto) > completitud(previo)) porFecha.set(punto.t, punto);
+  }
+  return podar([...porFecha.values()], ahora);
+}

@@ -4,7 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { aNumero, interpretarBevsa, interpretarBcu, interpretarSwissquote, interpretarDolarApi,
-         interpretarBluelytics, calcularBrecha, calcularDxy, podar } from './parseo.mjs';
+         interpretarBluelytics, calcularBrecha, calcularDxy, fusionarHistoricos, podar } from './parseo.mjs';
 
 test('aNumero entiende los formatos de número que puede mandar el endpoint', () => {
   assert.equal(aNumero(41.25), 41.25);
@@ -213,4 +213,35 @@ test('la brecha se calcula sobre los promedios', () => {
   assert.equal(calcularBrecha(1000, 2000), 100);
   assert.equal(calcularBrecha(0, 1545), null);
   assert.equal(calcularBrecha(null, 1545), null);
+});
+
+test('fusionar: une las dos series sin duplicar ni perder puntos', () => {
+  const ahora = Date.parse('2026-09-14T20:00:00Z');
+  const repo = [
+    { t: '2026-09-14T18:00:00.000Z', oro: 4290, bcu: 40.2 },
+    { t: '2026-09-14T19:00:00.000Z', oro: 4293, bcu: 40.2 },
+  ];
+  const local = [
+    { t: '2026-09-14T18:30:00.000Z', oro: 4291, bcu: 40.2 },
+    { t: '2026-09-14T19:00:00.000Z', oro: 4293, bcu: 40.2 },  // mismo instante
+    { t: '2026-09-14T19:40:00.000Z', oro: 4305, bcu: 40.2 },
+  ];
+  const r = fusionarHistoricos(repo, local, ahora);
+  assert.equal(r.length, 4);
+  assert.deepEqual(r.map((p) => p.t.slice(11, 16)), ['18:00', '18:30', '19:00', '19:40']);
+});
+
+test('fusionar: ante el mismo instante gana el punto más completo', () => {
+  const ahora = Date.parse('2026-09-14T20:00:00Z');
+  const flaco = [{ t: '2026-09-14T19:00:00.000Z', oro: 4293, bcu: null, brl: null }];
+  const gordo = [{ t: '2026-09-14T19:00:00.000Z', oro: 4293, bcu: 40.2, brl: 5.14 }];
+  assert.equal(fusionarHistoricos(flaco, gordo, ahora)[0].brl, 5.14);
+  assert.equal(fusionarHistoricos(gordo, flaco, ahora)[0].brl, 5.14); // en cualquier orden
+});
+
+test('fusionar: tolera series vacías o con basura', () => {
+  const ahora = Date.parse('2026-09-14T20:00:00Z');
+  assert.deepEqual(fusionarHistoricos(null, null, ahora), []);
+  assert.deepEqual(fusionarHistoricos([], [], ahora), []);
+  assert.equal(fusionarHistoricos([{ sinFecha: 1 }, null], [{ t: '2026-09-14T19:00:00.000Z' }], ahora).length, 1);
 });

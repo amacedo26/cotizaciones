@@ -14,8 +14,11 @@ frescos cada media hora. Esa dirección se agrega a favoritos y funciona
 siempre. Para sacarlo: `Desinstalar servicio.command`.
 
 El servidor escucha únicamente en `127.0.0.1`: nada fuera de esta máquina lo
-alcanza. `http://127.0.0.1:8787/estado` dice si la última bajada de datos
-funcionó, y `servidor.log` guarda el registro.
+alcanza. `http://127.0.0.1:8787/estado` dice cómo salieron la última consulta,
+la última bajada y la última publicación, y `servidor.log` guarda el registro.
+
+Ese servidor **empuja al repositorio** con las credenciales de git de esta Mac.
+Solo toca `historico.json`, y solo para agregarle puntos.
 
 **De a una vez.** Doble clic en `Cotizaciones.command`: baja los últimos datos
 y abre el tablero, sin instalar nada.
@@ -31,10 +34,16 @@ Hay dos motores, y conviene saber cuál da qué.
 fuentes cada 10 minutos y escribe archivos `*.local.*` que no están
 versionados. La página los prefiere cuando son más nuevos.
 
-**GitHub Actions es el respaldo.** Corre cada hora y commitea al repositorio,
-para que la serie siga creciendo aunque la Mac esté apagada. Sus tareas
-programadas son mejor esfuerzo: se retrasan y se saltean corridas, así que no
-se le confía el dato del momento.
+**El servidor local también publica la serie.** Cada 30 minutos fusiona su
+histórico con el del repositorio y sube lo que falte. Su serie es más densa
+(cada 10 minutos contra cada hora), así que el repositorio termina completo
+para todas las horas en que la Mac estuvo encendida.
+
+**GitHub Actions es el respaldo, y es impuntual.** Corre cada hora y commitea,
+para que la serie siga creciendo con la Mac apagada. Pero sus tareas
+programadas son mejor esfuerzo: el 2026-09-14 se saltó las corridas de las
+16:00 y las 18:00 UTC sin aviso. Por eso no se le confía ni la frescura ni la
+continuidad de la serie.
 
 ```
 Servidor local (cada 10 min)          GitHub Actions (cada hora)
@@ -123,7 +132,7 @@ gratuitas publica el valor previo.
 | `scripts/parseo.mjs` | Interpretación de números, del SOAP del BCU y cálculo del DXY. |
 | `scripts/probar-parseo.mjs` | Pruebas, sin red. |
 | `scripts/sondeo.mjs` | Diagnóstico: qué fuentes responden desde dónde. |
-| `servidor.mjs` | Servidor local. Consulta las fuentes cada 10 min y baja del repo cada 30. |
+| `servidor.mjs` | Servidor local. Consulta cada 10 min, baja del repo cada 30 y publica su serie cada 30. |
 | `*.local.*` | Datos que escribe el servidor local. No versionados; la página los prefiere si son más nuevos. |
 | `Instalar servicio.command` | Deja el tablero siempre disponible en 127.0.0.1:8787. |
 | `Desinstalar servicio.command` | Saca el servicio. No borra archivos. |
@@ -150,8 +159,10 @@ Requiere Node 20 o superior (usa `fetch` nativo). Sin `npm install`.
   moverse una vez por día. El tablero lo dice en la fuente de cada tarjeta.
 - **El oro no cotiza 24/7.** Cierra el viernes por la tarde de Nueva York y
   abre el domingo. El fin de semana el valor se repite.
-- **Los cron de GitHub Actions no son puntuales** y se deshabilitan solos si el
-  repo pasa 60 días sin actividad. Si el tablero deja de actualizarse sin
-  motivo, revisar eso primero.
+- **Los cron de GitHub Actions no son puntuales**, saltean corridas sin aviso, y
+  se deshabilitan solos si el repo pasa 60 días sin actividad. Si el tablero
+  deja de actualizarse sin motivo, revisar eso primero.
+- **La serie tiene huecos en las horas que la Mac estuvo apagada**, salvo que
+  Actions haya corrido. No hay forma de evitarlo sin algo encendido 24/7.
 - Las fuentes son gratuitas y sin contrato: pueden cortar sin aviso. Para
   decisiones con plata de verdad, verificar contra la fuente oficial.

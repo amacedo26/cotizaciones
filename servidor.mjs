@@ -10,14 +10,20 @@
 
 import { createServer } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
+import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { dirname, join, normalize, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { fusionarHistoricos } from './scripts/parseo.mjs';
+
+const correr = promisify(execFile);
 
 const RAIZ = dirname(fileURLToPath(import.meta.url));
 const PUERTO = Number(process.env.PUERTO || 8787);
 const CADA_DATOS = 10 * 60 * 1000;  // consultar las fuentes: esto da la frescura
 const CADA_PULL = 30 * 60 * 1000;   // bajar del repo: código y serie larga
+const CADA_PUBLICAR = 30 * 60 * 1000; // subir la serie propia al repo
 
 const TIPOS = {
   '.html': 'text/html; charset=utf-8',
@@ -59,12 +65,70 @@ function consultarFuentes() {
 let ultimoPull = { cuando: null, ok: null, detalle: 'todavía no corrió' };
 
 function bajarDatos() {
+  if (publicando) return; // la publicación ya hace su propio pull
   execFile('git', ['pull', '--quiet'], { cwd: RAIZ, timeout: 60_000 }, (error, _salida, err) => {
     ultimoPull = error
       ? { cuando: new Date().toISOString(), ok: false, detalle: (err || error.message).trim().slice(0, 300) }
       : { cuando: new Date().toISOString(), ok: true, detalle: 'sin novedades o actualizado' };
     registrar(ultimoPull.ok ? 'datos al día' : `no se pudieron bajar datos: ${ultimoPull.detalle}`);
   });
+}
+
+// --- publicar la serie propia ------------------------------------------------
+// Las tareas programadas de GitHub Actions saltean corridas, así que el
+// histórico del repositorio queda con huecos. Esta máquina mide cada 10 minutos
+// y publica su serie, que es más densa: el repositorio termina completo para
+// todas las horas en que la Mac estuvo encendida.
+//
+// Solo se toca historico.json. datos.js sigue siendo la foto del robot, y la
+// página prefiere la local igual, así que no hay motivo para pisarla desde acá.
+let ultimaPublicacion = { cuando: null, ok: null, detalle: 'todavía no corrió' };
+// Mientras se publica hay un instante con historico.json escrito y sin
+// commitear: un git pull ahí fallaría por cambios locales. Se turnan.
+let publicando = false;
+
+function leerSerie(ruta) {
+  if (!existsSync(ruta)) return [];
+  try {
+    const d = JSON.parse(readFileSync(ruta, 'utf8'));
+    return Array.isArray(d) ? d : [];
+  } catch { return []; }
+}
+
+async function publicarSerie() {
+  if (publicando) return;
+  publicando = true;
+  const marcar = (ok, detalle) => {
+    ultimaPublicacion = { cuando: new Date().toISOString(), ok, detalle: String(detalle).slice(0, 300) };
+    registrar(ok ? `serie publicada — ${detalle}` : `no se pudo publicar la serie: ${detalle}`);
+  };
+
+  try {
+    // el repositorio puede haber avanzado; los archivos versionados están
+    // limpios porque lo local vive en *.local.*, así que el rebase no choca
+    await correr('git', ['pull', '--rebase', '--quiet'], { cwd: RAIZ, timeout: 60_000 });
+
+    const delRepo = leerSerie(join(RAIZ, 'historico.json'));
+    const propia = leerSerie(join(RAIZ, 'historico.local.json'));
+    if (!propia.length) return marcar(true, 'todavía no hay serie propia');
+
+    const fusionada = fusionarHistoricos(delRepo, propia);
+    if (fusionada.length === delRepo.length) return marcar(true, 'el repositorio ya está al día');
+
+    const nuevos = fusionada.length - delRepo.length;
+    writeFileSync(join(RAIZ, 'historico.json'), JSON.stringify(fusionada));
+    await correr('git', ['add', 'historico.json'], { cwd: RAIZ, timeout: 30_000 });
+    await correr('git', ['commit', '-m', `serie local: +${nuevos} punto${nuevos === 1 ? '' : 's'}`],
+      { cwd: RAIZ, timeout: 30_000 });
+    await correr('git', ['push', '--quiet'], { cwd: RAIZ, timeout: 60_000 });
+    marcar(true, `+${nuevos} punto${nuevos === 1 ? '' : 's'} al repositorio`);
+  } catch (e) {
+    // dejar el archivo como estaba: un push a medias no debe ensuciar el clone
+    try { await correr('git', ['checkout', '--', 'historico.json'], { cwd: RAIZ, timeout: 30_000 }); } catch { /* nada */ }
+    marcar(false, (e.stderr || e.message || 'error desconocido').trim());
+  } finally {
+    publicando = false;
+  }
 }
 
 // --- servidor ----------------------------------------------------------------
@@ -83,7 +147,7 @@ async function resolver(url) {
 const servidor = createServer(async (pedido, respuesta) => {
   if (pedido.url === '/estado') {
     respuesta.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-    return respuesta.end(JSON.stringify({ puerto: PUERTO, carpeta: RAIZ, ultimaConsulta, ultimoPull }, null, 2));
+    return respuesta.end(JSON.stringify({ puerto: PUERTO, carpeta: RAIZ, ultimaConsulta, ultimoPull, ultimaPublicacion }, null, 2));
   }
 
   const ruta = await resolver(pedido.url);
@@ -120,4 +184,6 @@ servidor.listen(PUERTO, '127.0.0.1', () => {
   bajarDatos();
   setInterval(consultarFuentes, CADA_DATOS);
   setInterval(bajarDatos, CADA_PULL);
+  // la primera publicación espera: antes tiene que existir una serie propia
+  setTimeout(() => { publicarSerie(); setInterval(publicarSerie, CADA_PUBLICAR); }, 2 * 60 * 1000);
 });
