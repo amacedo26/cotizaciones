@@ -1,51 +1,51 @@
 {
-  "actualizado": "2026-09-14T14:58:12.073Z",
+  "actualizado": "2026-09-14T15:58:31.099Z",
   "mercado": {
     "oro": {
       "nombre": "Oro",
       "unidad": "USD / onza troy",
       "estado": "ok",
-      "precio": 4276.5,
-      "momento": "2026-09-14T14:58:08Z",
+      "precio": 4291.899902,
+      "momento": "2026-09-14T15:58:08Z",
       "fuente": "gold-api.com",
-      "variacion": null
+      "variacion": 0.36
     },
     "plata": {
       "nombre": "Plata",
       "unidad": "USD / onza troy",
       "estado": "ok",
-      "precio": 62.997002,
-      "momento": "2026-09-14T14:58:07Z",
+      "precio": 63.48,
+      "momento": "2026-09-14T15:58:07Z",
       "fuente": "gold-api.com",
-      "variacion": null
+      "variacion": 0.77
     },
     "eurusd": {
       "nombre": "EUR / USD",
       "unidad": "dólares por euro",
       "estado": "ok",
-      "precio": 1.1592,
+      "precio": 1.1551,
       "fuente": "BCE vía frankfurter.dev",
-      "momento": "2026-09-11",
-      "variacion": null
+      "momento": "2026-09-14",
+      "variacion": -0.35
     },
     "usdjpy": {
       "nombre": "USD / JPY",
       "unidad": "yenes por dólar",
       "estado": "ok",
-      "precio": 154.04,
+      "precio": 154.55,
       "fuente": "BCE vía frankfurter.dev",
-      "momento": "2026-09-11",
-      "variacion": null
+      "momento": "2026-09-14",
+      "variacion": 0.33
     },
     "dxy": {
       "nombre": "Índice dólar (DXY)",
       "unidad": "puntos — calculado",
       "estado": "ok",
-      "precio": 99.168,
+      "precio": 99.483,
       "fuente": "calculado sobre BCE vía frankfurter.dev",
-      "momento": "2026-09-11",
+      "momento": "2026-09-14",
       "calculado": true,
-      "variacion": null
+      "variacion": 0.32
     }
   },
   "bcu": {
@@ -67,8 +67,8 @@
   },
   "derivado": {
     "baseDolar": "BCU",
-    "oroEnPesosPorOnza": 171915.3,
-    "oroEnPesosPorGramo": 5527.2
+    "oroEnPesosPorOnza": 172534.38,
+    "oroEnPesosPorGramo": 5547.1
   },
   "incidencias": [],
   "historico": [
@@ -79,6 +79,16 @@
       "dxy": 99.168,
       "eurusd": 1.1592,
       "usdjpy": 154.04,
+      "bcu": 40.2,
+      "bevsa": null
+    },
+    {
+      "t": "2026-09-14T15:58:31.099Z",
+      "oro": 4291.899902,
+      "plata": 63.48,
+      "dxy": 99.483,
+      "eurusd": 1.1551,
+      "usdjpy": 154.55,
       "bcu": 40.2,
       "bevsa": null
     }
