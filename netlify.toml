@@ -1,0 +1,13 @@
+[build]
+  publish = "public"
+
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+
+# El tablero es una sola página; todo lo demás son funciones bajo /api.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+  force = false

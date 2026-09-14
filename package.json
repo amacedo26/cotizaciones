@@ -1,0 +1,14 @@
+{
+  "name": "cotizaciones",
+  "private": true,
+  "type": "module",
+  "description": "Tablero de oro, dólar internacional y dólar regional",
+  "scripts": {
+    "test": "node --test scripts/probar-parseo.mjs",
+    "sondeo": "node scripts/sondeo.mjs",
+    "candidatos": "node scripts/candidatos.mjs"
+  },
+  "dependencies": {
+    "@netlify/blobs": "^8.1.0"
+  }
+}

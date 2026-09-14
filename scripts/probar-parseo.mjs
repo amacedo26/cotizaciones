@@ -4,7 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { aNumero, interpretarBevsa, interpretarBcu, interpretarSwissquote, interpretarDolarApi,
-         interpretarBluelytics, calcularBrecha, calcularDxy, fusionarHistoricos, podar } from './parseo.mjs';
+         interpretarBluelytics, calcularBrecha, calcularDxy, fusionarHistoricos, podar } from '../lib/parseo.mjs';
 
 test('aNumero entiende los formatos de número que puede mandar el endpoint', () => {
   assert.equal(aNumero(41.25), 41.25);

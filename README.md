@@ -1,168 +1,132 @@
 # Tablero de cotizaciones
 
-Oro, plata, dólar internacional y dólar uruguayo en una página. Abrir
-`index.html` con doble clic alcanza.
-
-## Para verlo
-
-Tres formas, de más a menos automática.
-
-**Como favorito del navegador (recomendado).** Doble clic en
-`Instalar servicio.command`. Instala un servicio de macOS que arranca solo al
-prender la Mac, sirve el tablero en `http://127.0.0.1:8787` y baja datos
-frescos cada media hora. Esa dirección se agrega a favoritos y funciona
-siempre. Para sacarlo: `Desinstalar servicio.command`.
-
-El servidor escucha únicamente en `127.0.0.1`: nada fuera de esta máquina lo
-alcanza. `http://127.0.0.1:8787/estado` dice cómo salieron la última consulta,
-la última bajada y la última publicación, y `servidor.log` guarda el registro.
-
-Ese servidor **empuja al repositorio** con las credenciales de git de esta Mac.
-Solo toca `historico.json`, y solo para agregarle puntos.
-
-**De a una vez.** Doble clic en `Cotizaciones.command`: baja los últimos datos
-y abre el tablero, sin instalar nada.
-
-**Sin nada.** Abrir `index.html` directamente. Funciona, pero muestra los datos
-que tengas bajados de la última vez.
+Oro, plata, dólar internacional y dólar regional (Uruguay, Brasil, Argentina)
+en una página que se actualiza sola cada 10 minutos. Vive en Netlify.
 
 ## Cómo funciona
 
-Hay dos motores, y conviene saber cuál da qué.
-
-**El servidor local es el que da frescura.** Corre en la Mac, consulta las
-fuentes cada 10 minutos y escribe archivos `*.local.*` que no están
-versionados. La página los prefiere cuando son más nuevos.
-
-**El servidor local también publica la serie.** Cada 30 minutos fusiona su
-histórico con el del repositorio y sube lo que falte. Su serie es más densa
-(cada 10 minutos contra cada hora), así que el repositorio termina completo
-para todas las horas en que la Mac estuvo encendida.
-
-**GitHub Actions es el respaldo, y es impuntual.** Corre cada hora y commitea,
-para que la serie siga creciendo con la Mac apagada. Pero sus tareas
-programadas son mejor esfuerzo: el 2026-09-14 se saltó las corridas de las
-16:00 y las 18:00 UTC sin aviso. Por eso no se le confía ni la frescura ni la
-continuidad de la serie.
+Una sola pieza, sin nada corriendo en ninguna computadora personal:
 
 ```
-Servidor local (cada 10 min)          GitHub Actions (cada hora)
-  └─ actualizar.mjs SALIDA_LOCAL=1      └─ actualizar.mjs
-       escribe *.local.* (sin versionar)     escribe datos.js / historico.json
-                                             y commitea
-                    ↓                                   ↓
-              la página toma el más reciente de los dos
+Netlify — función programada, cada 10 minutos
+  └─ lib/fuentes.mjs  consulta todas las fuentes en paralelo
+       ├─ api.gold-api.com               oro (XAU) y plata (XAG), precio vivo
+       ├─ forex-data-feed.swissquote.com EUR/USD, USD/JPY, GBP/USD, USD/CAD,
+       │                                 USD/SEK, USD/CHF — vivos; de ahí el DXY
+       ├─ api.fxratesapi.com             dólar en Brasil, por minuto
+       ├─ dolarapi.com                   dólar en Argentina, oficial y blue
+       └─ cotizaciones.bcu.gub.uy        dólar en Uruguay (SOAP)
+  └─ guarda la foto y la serie en Netlify Blobs
 
-fuentes
-  ├─ api.gold-api.com          → oro (XAU) y plata (XAG), precio vivo
-  ├─ forex-data-feed.swissquote.com → EUR/USD, USD/JPY, GBP/USD, USD/CAD,
-  │                              USD/SEK, USD/CHF — vivos; de ahí sale el DXY
-  ├─ api.frankfurter.dev       → respaldo de divisas (BCE, una vez por día hábil)
-  └─ cotizaciones.bcu.gub.uy   → dólar uruguayo (SOAP)
+public/index.html  →  pide /api/datos  →  lee de Blobs
 ```
 
-Un HTML no puede consultar estas fuentes por su cuenta: el navegador bloquea
-por CORS cualquier pedido a otro dominio. Todo tablero "en vivo" hecho con un
-solo archivo HTML choca contra esto.
+El tablero es público: cualquiera con la URL lo ve. Son cotizaciones de
+mercado, información pública.
 
-Una consulta local que falla **no escribe nada**: si escribiera un snapshot
-vacío, al ser el más reciente la página lo preferiría y taparía datos buenos
-con "sin dato".
+## Rutas
+
+| Ruta | Qué devuelve |
+|---|---|
+| `/` | El tablero |
+| `/api/datos` | La última foto más la serie histórica |
+| `/api/estado` | Diagnóstico: cómo salió la última corrida y hace cuánto |
+
+**Si el tablero parece congelado, mirar `/api/estado` primero.** Dice si la
+última corrida salió bien, cuándo fue, cuánto tardó y qué incidencias hubo.
+El campo `alDia` es `false` si pasaron más de 25 minutos sin una corrida.
 
 ## Por qué estas fuentes y no otras
 
-No es una preferencia: son las únicas que respondieron desde un runner de
-GitHub Actions. Verificado con `scripts/sondeo.mjs` el 2026-09-14:
+No es preferencia: son las únicas que respondieron desde una IP de datacenter,
+que es desde donde corre la función. Verificado con `scripts/sondeo.mjs`:
 
 | Fuente | Resultado | Veredicto |
 |---|---|---|
 | api.gold-api.com | 200, precio al segundo | ✅ en uso |
 | forex-data-feed.swissquote.com | 200, bid/ask vivos en los 6 pares | ✅ en uso |
-| api.frankfurter.dev | 200, pero una tasa por día hábil | ✅ solo de respaldo |
+| api.fxratesapi.com | 200, cotización por minuto | ✅ en uso |
+| dolarapi.com | 200, oficial y blue | ✅ en uso |
 | cotizaciones.bcu.gub.uy | 200, SOAP | ✅ en uso |
-| Yahoo Finance (query1 y query2) | 429 Too Many Requests | ❌ bloquea IPs de datacenter |
-| Stooq (.com y .pl) | 404 en todos los símbolos | ❌ bloquea IPs de datacenter |
-| goldprice.org | 403 Forbidden | ❌ |
+| api.frankfurter.dev | 200, pero una tasa por día hábil | ✅ solo de respaldo |
+| api.bluelytics.com.ar | 200 | ✅ solo de respaldo |
+| Yahoo Finance | 429 en query1 y query2 | ❌ bloquea datacenters |
+| Stooq | 404 en todos los símbolos, en .com y .pl | ❌ bloquea datacenters |
+| goldprice.org | 403 | ❌ |
+| Swissquote USD/BRL y USD/ARS | devuelve `[]` | ❌ no los lista |
+| awesomeapi | 429, cuota agotada | ❌ desde IPs compartidas |
 | BEVSA | página de login | ❌ ver abajo |
 
-Si alguna deja de responder, correr el sondeo de nuevo antes de cambiar código:
-desde Actions, workflow "Cotizaciones", campo modo = `sondeo`.
+Si alguna deja de responder: `npm run sondeo` desde cualquier máquina.
+Para explorar fuentes nuevas sin tocar el diagnóstico: `npm run candidatos`.
 
 ## Sobre BEVSA
 
 `dolaronline.bevsa.com.uy/Dolar/DataDolarNuevo` **no es público**. Devuelve la
-página de login, y con cookie de sesión anónima responde `302` a la home. La
-cuenta además tiene segundo factor y el sitio está detrás de Cloudflare, así
-que un job desatendido no puede autenticarse. Insistir con reintentos solo
-arriesga que marquen la cuenta.
+página de login, y con cookie anónima responde `302`. La cuenta tiene segundo
+factor y el sitio está detrás de Cloudflare: un proceso desatendido no puede
+autenticarse, e insistir solo arriesga que marquen la cuenta.
 
-Queda como extra manual: si se carga una cookie de sesión válida en el secreto
-`BEVSA_COOKIE` del repositorio, el script la usa hasta que expire y el tablero
-muestra la cotización interbancaria además de la del BCU. Sin ese secreto el
-módulo no hace nada y todo funciona igual.
-
-**El BCU no es BEVSA**: publica la cotización oficial, no la interbancaria. Los
-valores difieren.
+**El BCU no es BEVSA**: publica la cotización oficial, no la interbancaria.
 
 ## Qué está calculado y qué viene de una fuente
 
-Dos números del tablero no los publica nadie, los calcula el script, y están
-etiquetados como tales:
+Tres números del tablero no los publica nadie; los calcula el código, y están
+etiquetados como tales en pantalla:
 
 - **DXY**: media geométrica ponderada frente a seis monedas, con la fórmula
-  oficial del índice. Da diferencias del orden del 0,1 % contra el valor
-  publicado. Hay una prueba que lo verifica contra un cálculo a mano.
-- **Oro en pesos**: el oro en dólares multiplicado por el dólar uruguayo de la
-  misma corrida. No es una cotización de mercado.
+  oficial. Difiere del valor publicado en el orden del 0,1 %. Hay una prueba
+  que lo verifica contra un cálculo a mano.
+- **Brecha cambiaria**: el blue sobre el oficial argentino.
+- **Oro en pesos**: el oro en dólares por el dólar uruguayo de la misma corrida.
+  No es una cotización de mercado.
 
-La **variación porcentual** de cada tarjeta se calcula contra la corrida
-anterior propia, no contra el cierre del día: ninguna de estas fuentes
-gratuitas publica el valor previo.
+La **variación** de cada tarjeta se calcula contra la corrida anterior propia:
+ninguna de estas fuentes gratuitas publica el valor previo.
 
-## Archivos
+## El dólar blue
 
-| Archivo | Qué es |
-|---|---|
-| `index.html` | El tablero. Sin dependencias ni CDN. |
-| `datos.js` | Snapshot + histórico como variable global. Es lo que lee la página. |
-| `datos.json` | Lo mismo, en JSON, por si otro proceso lo quiere. |
-| `historico.json` | Serie acumulada de todas las corridas. |
-| `raw-bevsa.json` | Última respuesta cruda de BEVSA, si el módulo opcional corrió. |
-| `scripts/actualizar.mjs` | Consulta las fuentes y escribe los archivos. |
-| `scripts/parseo.mjs` | Interpretación de números, del SOAP del BCU y cálculo del DXY. |
-| `scripts/probar-parseo.mjs` | Pruebas, sin red. |
-| `scripts/sondeo.mjs` | Diagnóstico: qué fuentes responden desde dónde. |
-| `servidor.mjs` | Servidor local. Consulta cada 10 min, baja del repo cada 30 y publica su serie cada 30. |
-| `*.local.*` | Datos que escribe el servidor local. No versionados; la página los prefiere si son más nuevos. |
-| `Instalar servicio.command` | Deja el tablero siempre disponible en 127.0.0.1:8787. |
-| `Desinstalar servicio.command` | Saca el servicio. No borra archivos. |
+No tiene fuente oficial. Sale de agregadores que relevan el mercado informal y
+**el valor difiere entre uno y otro**: en la misma consulta, dolarapi daba
+compra 1535 donde bluelytics daba 1522. Por eso el tablero lo marca como
+informal y muestra de qué agregador salió.
 
-## Correr a mano
+## Desarrollo
 
 ```bash
-node scripts/actualizar.mjs --dry   # consulta e imprime, no escribe nada
-node scripts/actualizar.mjs         # consulta y escribe los archivos
-node --test scripts/probar-parseo.mjs
-node scripts/sondeo.mjs             # diagnóstico de fuentes
+npm install
+npm test                      # 24 pruebas, sin red
+npm run sondeo                # ¿responden las fuentes en producción?
+npm run candidatos            # explorar fuentes nuevas
+node scripts/ver-foto.mjs     # la foto completa, sin escribir nada
+netlify dev                   # el sitio entero, local
 ```
 
-Requiere Node 20 o superior (usa `fetch` nativo). Sin `npm install`.
+Requiere Node 20 o superior.
 
 ## Límites conocidos
 
-- **Con el servidor local instalado, los datos se refrescan cada 10 minutos.**
-  Sin él, dependés del cron de Actions, que es impuntual por diseño.
+- **Las funciones programadas solo corren en deploys publicados.** En previews
+  y ramas no se disparan.
+- **30 segundos de techo** por corrida. Por eso las fuentes se consultan en
+  paralelo; en serie no había margen.
+- **Los blobs no tienen control de concurrencia**: última escritura gana. Con
+  una sola función cada 10 minutos no es un problema, pero conviene saberlo
+  antes de agregar otra que escriba.
+- **El oro no cotiza los fines de semana.** Cierra el viernes por la tarde de
+  Nueva York y abre el domingo; fuera de rueda el valor se repite.
 - **El BCU publica por día hábil**, así que el dólar uruguayo no se mueve
-  durante el día por más que todo lo demás sí. Se pide una ventana de diez días
-  para que un feriado no deje la consulta vacía.
-- **Si Swissquote se cae**, las divisas caen al respaldo del BCE y vuelven a
-  moverse una vez por día. El tablero lo dice en la fuente de cada tarjeta.
-- **El oro no cotiza 24/7.** Cierra el viernes por la tarde de Nueva York y
-  abre el domingo. El fin de semana el valor se repite.
-- **Los cron de GitHub Actions no son puntuales**, saltean corridas sin aviso, y
-  se deshabilitan solos si el repo pasa 60 días sin actividad. Si el tablero
-  deja de actualizarse sin motivo, revisar eso primero.
-- **La serie tiene huecos en las horas que la Mac estuvo apagada**, salvo que
-  Actions haya corrido. No hay forma de evitarlo sin algo encendido 24/7.
-- Las fuentes son gratuitas y sin contrato: pueden cortar sin aviso. Para
+  durante el día. Se pide una ventana de diez días para que un feriado no deje
+  la consulta vacía.
+- **Las fuentes son gratuitas y sin contrato**: pueden cortar sin aviso. Para
   decisiones con plata de verdad, verificar contra la fuente oficial.
+
+## Historia del proyecto
+
+Antes de Netlify esto corría con GitHub Actions y un servidor local en una Mac.
+Se abandonaron los dos: las tareas programadas de Actions saltean corridas sin
+aviso (el 2026-09-14 se perdieron las de 16:00 y 18:00 UTC), y el servidor
+local solo cubre las horas en que la máquina está encendida.
+
+Si quedó instalado el servicio de macOS de esa época, sacarlo con
+`Desinstalar servicio.command`. Ya no hace falta y seguiría empujando commits.
