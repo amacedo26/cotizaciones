@@ -5,7 +5,7 @@
 import { reunirDatos, puntoDe, tieneAlgo } from '../../lib/fuentes.mjs';
 import { fusionarHistoricos } from '../../lib/parseo.mjs';
 import { SEMILLA } from '../../lib/semilla.mjs';
-import { almacen, CLAVE_FOTO, CLAVE_SERIE, CLAVE_BITACORA } from './almacen.mjs';
+import { almacen, CLAVE_FOTO, CLAVE_SERIE, CLAVE_BITACORA } from '../../lib/almacen.mjs';
 
 export default async (req) => {
   const arranque = Date.now();

@@ -1,6 +1,6 @@
 // Diagnóstico: cómo salió la última corrida programada y hace cuánto fue.
 // Es lo primero que hay que mirar cuando el tablero parece congelado.
-import { almacen, CLAVE_BITACORA, CLAVE_SERIE } from './almacen.mjs';
+import { almacen, CLAVE_BITACORA, CLAVE_SERIE } from '../../lib/almacen.mjs';
 
 export default async () => {
   const store = almacen();

@@ -1,5 +1,5 @@
 // Lo que lee el tablero: la última foto más la serie.
-import { almacen, CLAVE_FOTO, CLAVE_SERIE } from './almacen.mjs';
+import { almacen, CLAVE_FOTO, CLAVE_SERIE } from '../../lib/almacen.mjs';
 import { SEMILLA } from '../../lib/semilla.mjs';
 
 export default async () => {
