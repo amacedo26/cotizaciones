@@ -57,6 +57,13 @@
   .delta.plano { color: var(--tenue); }
 
   .destacado { border-color: #2f3a48; background: var(--panel-alto); }
+  .informal { border-style: dashed; }
+  .informal .valor { color: var(--alerta); }
+  .etiqueta {
+    display: inline-block; font-size: 10px; letter-spacing: .04em; text-transform: uppercase;
+    padding: 2px 6px; border-radius: 4px; background: rgba(210,153,34,.14); color: var(--alerta);
+    border: 1px solid rgba(210,153,34,.3); margin-left: 6px; vertical-align: 2px;
+  }
   .destacado .valor { color: var(--acento); }
   .oro .valor { color: var(--oro); }
 
@@ -95,7 +102,7 @@
     <div class="sello" id="sello">cargando…</div>
   </header>
 
-  <h2>Dólar en Uruguay</h2>
+  <h2>Región</h2>
   <div class="bevsa">
     <div class="tarjeta destacado" id="tarjeta-uyu"></div>
     <div class="tarjeta">
@@ -104,7 +111,9 @@
       <div class="pie" id="pie-uyu"></div>
     </div>
   </div>
+  <div class="rejilla" id="rejilla-region"></div>
   <div class="rejilla" id="rejilla-bevsa"></div>
+  <p class="nota" id="nota-region"></p>
 
   <h2>Metales y dólar internacional</h2>
   <div class="rejilla" id="rejilla-mercado"></div>
@@ -116,11 +125,13 @@
   <div id="incidencias"></div>
 
   <footer>
-    Los datos los escribe <code>scripts/actualizar.mjs</code> cada dos horas vía GitHub Actions.
     Esta página no consulta ninguna fuente por su cuenta: lee <code>datos.js</code>.
-    Oro y plata: gold-api.com. Divisas: tasas del BCE, que se publican una vez por día hábil.
-    Dólar uruguayo: servicio oficial del Banco Central. El oro no cotiza los fines de semana,
-    así que fuera de rueda el valor se repite.
+    Con el servidor local instalado se refresca cada 10 minutos; si no, depende del
+    respaldo horario de GitHub Actions.
+    <br>
+    Oro y plata: gold-api.com · Divisas y DXY: Swissquote · Brasil: fxratesapi.com ·
+    Uruguay: Banco Central (se publica por día hábil) · Argentina: dolarapi.com.
+    El oro no cotiza los fines de semana, así que fuera de rueda el valor se repite.
   </footer>
 </div>
 
@@ -130,7 +141,7 @@
 <script src="datos.local.js"></script>
 <script>
 (function () {
-  var DECIMALES = { oro: 2, plata: 2, dxy: 2, eurusd: 4, usdjpy: 2, uyu: 3 };
+  var DECIMALES = { oro: 2, plata: 2, dxy: 2, eurusd: 4, usdjpy: 2, uyu: 3, brl: 4, ars: 2 };
 
   function num(v, dec) {
     if (v === null || v === undefined || isNaN(v)) return null;
@@ -249,6 +260,53 @@
     document.getElementById('pie-uyu').textContent = conDato.length
       ? conDato.length + (conDato.length === 1 ? ' registro' : ' registros') + ' · desde ' + reloj(conDato[0].t)
       : 'sin registros todavía';
+
+    // Brasil y Argentina. El blue va marcado como informal a propósito: no
+    // tiene fuente oficial y el número difiere entre agregadores.
+    var br = D.brasil || {};
+    var ar = D.argentina || {};
+    var tarjetas = [];
+
+    tarjetas.push('<div class="tarjeta"><div class="nombre">Brasil — real</div>' +
+      '<div class="valor">' + (num(br.valor, DECIMALES.brl) || '<span class="sd">sin dato</span>') + '</div>' +
+      '<div class="unidad">reales por dólar</div>' +
+      '<div class="pie">' + (br.estado === 'ok'
+        ? (br.fuente + (br.vivo ? ' · precio de mercado' : ' · referencia diaria')) 
+        : '<span class="viejo">no se pudo leer</span>') + '</div></div>');
+
+    if (ar.oficial) {
+      tarjetas.push('<div class="tarjeta"><div class="nombre">Argentina — oficial</div>' +
+        '<div class="valor">' + num(ar.oficial.promedio, DECIMALES.ars) + '</div>' +
+        '<div class="unidad">pesos argentinos por dólar</div>' +
+        '<div class="pie">' + (ar.fuente || '') + '</div></div>');
+    }
+
+    if (ar.blue) {
+      tarjetas.push('<div class="tarjeta informal"><div class="nombre">Argentina — blue' +
+        '<span class="etiqueta">informal</span></div>' +
+        '<div class="valor">' + num(ar.blue.promedio, DECIMALES.ars) + '</div>' +
+        '<div class="unidad">pesos argentinos por dólar</div>' +
+        '<div class="pie">' + (ar.fuente || '') + ' · sin fuente oficial</div></div>');
+    }
+
+    if (ar.brecha !== null && ar.brecha !== undefined) {
+      tarjetas.push('<div class="tarjeta"><div class="nombre">Brecha cambiaria</div>' +
+        '<div class="valor">' + num(ar.brecha, 1) + '%</div>' +
+        '<div class="unidad">blue sobre oficial — calculado</div>' +
+        '<div class="pie">se calcula acá, no viene de ninguna fuente</div></div>');
+    }
+
+    if (!ar.oficial && !ar.blue) {
+      tarjetas.push('<div class="tarjeta"><div class="nombre">Argentina</div>' +
+        '<div class="valor"><span class="sd">sin dato</span></div>' +
+        '<div class="unidad">pesos argentinos por dólar</div>' +
+        '<div class="pie"><span class="viejo">no se pudo leer</span></div></div>');
+    }
+
+    document.getElementById('rejilla-region').innerHTML = tarjetas.join('');
+    document.getElementById('nota-region').textContent = ar.blue
+      ? 'El dólar blue no tiene fuente oficial: sale de agregadores que relevan el mercado informal, y el valor difiere entre uno y otro. Por eso se muestra de dónde salió.'
+      : '';
 
     var bv = D.bevsa || {};
     document.getElementById('rejilla-bevsa').innerHTML = bv.estado === 'ok'

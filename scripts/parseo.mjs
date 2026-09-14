@@ -192,3 +192,46 @@ export function interpretarSwissquote(payload) {
   }
   return mejor ? +mejor.medio.toFixed(6) : null;
 }
+
+// --- Argentina ---------------------------------------------------------------
+// El peso argentino se mueve en órdenes de magnitud a lo largo de los años, así
+// que el rango plausible es ancho a propósito: sirve para descartar un id o un
+// porcentaje colado, no para validar el valor.
+export const ARS_MIN = 50;
+export const ARS_MAX = 500_000;
+
+function cotizacionArs(compra, venta, promedio, fecha) {
+  const c = aNumero(compra);
+  const v = aNumero(venta);
+  const p = aNumero(promedio) ?? (c !== null && v !== null ? (c + v) / 2 : (v ?? c));
+  if (p === null || p < ARS_MIN || p > ARS_MAX) return null;
+  return { compra: c, venta: v, promedio: +p.toFixed(2), fecha: fecha ?? null };
+}
+
+// dolarapi.com devuelve un arreglo con una entrada por "casa" de cambio.
+export function interpretarDolarApi(payload) {
+  if (!Array.isArray(payload)) return null;
+  const porCasa = (casa) => payload.find((x) => x?.casa === casa);
+  const leer = (x) => (x ? cotizacionArs(x.compra, x.venta, null, x.fechaActualizacion) : null);
+  const oficial = leer(porCasa('oficial'));
+  const blue = leer(porCasa('blue'));
+  if (!oficial && !blue) return null;
+  return { estado: 'ok', oficial, blue };
+}
+
+// bluelytics usa otra forma: un objeto por tipo, con el promedio ya calculado.
+export function interpretarBluelytics(payload) {
+  const leer = (x) => (x ? cotizacionArs(x.value_buy, x.value_sell, x.value_avg, payload?.last_update) : null);
+  const oficial = leer(payload?.oficial);
+  const blue = leer(payload?.blue);
+  if (!oficial && !blue) return null;
+  return { estado: 'ok', oficial, blue };
+}
+
+// La brecha entre el oficial y el informal: el número que se mira de verdad.
+export function calcularBrecha(oficial, blue) {
+  const o = aNumero(oficial);
+  const b = aNumero(blue);
+  if (o === null || b === null || o <= 0) return null;
+  return +(((b / o) - 1) * 100).toFixed(1);
+}

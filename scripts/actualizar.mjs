@@ -13,7 +13,8 @@
 import { writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { aNumero, interpretarBevsa, interpretarBcu, interpretarSwissquote, calcularDxy, podar } from './parseo.mjs';
+import { aNumero, interpretarBevsa, interpretarBcu, interpretarSwissquote, interpretarDolarApi,
+         interpretarBluelytics, calcularBrecha, calcularDxy, podar } from './parseo.mjs';
 
 const DIR = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SOLO_LECTURA = process.argv.includes('--dry');
@@ -135,6 +136,51 @@ async function traerMercado() {
   return mercado;
 }
 
+// --- Brasil ------------------------------------------------------------------
+// fxratesapi cotiza por minuto; el BCE queda de respaldo, con su tasa diaria.
+// Swissquote no lista USD/BRL (devuelve []) y awesomeapi agota cuota desde IPs
+// compartidas: ambas descartadas, no volver a intentarlas sin motivo.
+async function traerBrasil() {
+  const intentos = [
+    { url: 'https://api.fxratesapi.com/latest?base=USD&currencies=BRL', fuente: 'fxratesapi.com', vivo: true,
+      momento: (d) => d.date ?? null },
+    { url: 'https://api.frankfurter.dev/v1/latest?base=USD&symbols=BRL', fuente: 'BCE vía frankfurter.dev', vivo: false,
+      momento: (d) => d.date ?? null },
+  ];
+  for (const { url, fuente, vivo, momento } of intentos) {
+    try {
+      const d = JSON.parse(await pedir(url, { headers: { Accept: 'application/json' } }));
+      const valor = aNumero(d?.rates?.BRL);
+      if (valor === null || valor <= 0 || valor > 100) throw new Error('sin un valor plausible para BRL');
+      return { estado: 'ok', valor: +valor.toFixed(4), fuente, vivo, momento: momento(d) };
+    } catch (e) {
+      anotar(`Brasil (${fuente}): ${e.message}`);
+    }
+  }
+  return { estado: 'error', valor: null };
+}
+
+// --- Argentina ---------------------------------------------------------------
+// El blue no tiene fuente oficial: sale de agregadores que relevan el mercado
+// informal. Se guarda de qué agregador vino, porque entre uno y otro los
+// valores difieren y el tablero tiene que poder decir de dónde sacó el número.
+async function traerArgentina() {
+  const intentos = [
+    { url: 'https://dolarapi.com/v1/dolares', fuente: 'dolarapi.com', leer: interpretarDolarApi },
+    { url: 'https://api.bluelytics.com.ar/v2/latest', fuente: 'bluelytics.com.ar', leer: interpretarBluelytics },
+  ];
+  for (const { url, fuente, leer } of intentos) {
+    try {
+      const r = leer(JSON.parse(await pedir(url, { headers: { Accept: 'application/json' } })));
+      if (!r) throw new Error('no se reconocieron el oficial ni el blue');
+      return { ...r, fuente, brecha: calcularBrecha(r.oficial?.promedio, r.blue?.promedio) };
+    } catch (e) {
+      anotar(`Argentina (${fuente}): ${e.message}`);
+    }
+  }
+  return { estado: 'error', oficial: null, blue: null, brecha: null };
+}
+
 // --- dólar uruguayo: Banco Central ------------------------------------------
 async function traerBcu() {
   const hoy = new Date();
@@ -212,6 +258,9 @@ const mercado = await traerMercado();
 console.log('Consultando el Banco Central...');
 const bcu = await traerBcu();
 const bevsa = await traerBevsa();
+console.log('Consultando Brasil y Argentina...');
+const brasil = await traerBrasil();
+const argentina = await traerArgentina();
 
 // en modo local la serie propia manda; si aún no existe, arranca de la del repo
 const previo = LOCAL
@@ -229,6 +278,9 @@ const punto = {
   usdjpy: mercado.usdjpy?.precio ?? null,
   bcu: bcu.promedio ?? null,
   bevsa: bevsa.promedio ?? null,
+  brl: brasil.valor ?? null,
+  arsOficial: argentina.oficial?.promedio ?? null,
+  arsBlue: argentina.blue?.promedio ?? null,
 };
 
 // La variación se calcula contra la corrida anterior propia, no contra el
@@ -255,6 +307,8 @@ const snapshot = {
     estado: bevsa.estado, compra: bevsa.compra ?? null, venta: bevsa.venta ?? null,
     promedio: bevsa.promedio ?? null, fecha: bevsa.fecha ?? null, error: bevsa.error ?? null,
   },
+  brasil,
+  argentina,
   // Calculado acá, no tomado de ninguna fuente: cruce del oro (USD/oz) con el
   // dólar uruguayo de esta misma corrida. No es una cotización de mercado.
   derivado: {

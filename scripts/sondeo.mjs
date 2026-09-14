@@ -8,7 +8,7 @@
 //   node scripts/sondeo.mjs
 // o desde Actions: workflow "Cotizaciones", modo = sondeo
 
-import { interpretarSwissquote, interpretarBcu, calcularDxy } from './parseo.mjs';
+import { interpretarSwissquote, interpretarBcu, interpretarDolarApi, calcularDxy } from './parseo.mjs';
 
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
 const resultados = [];
@@ -88,7 +88,29 @@ await revisar('BCU dólar uruguayo', true, async () => {
   return `${r.promedio} UYU  (${r.fecha})`;
 });
 
+await revisar('Brasil (fxratesapi)', true, async () => {
+  const { cuerpo, estado, ok } = await pedir('https://api.fxratesapi.com/latest?base=USD&currencies=BRL');
+  if (!ok) throw new Error(`HTTP ${estado}`);
+  const d = JSON.parse(cuerpo);
+  return `${d.rates?.BRL?.toFixed(4)} BRL  (${d.date})`;
+});
+
+await revisar('Argentina (dolarapi)', true, async () => {
+  const { cuerpo, estado, ok } = await pedir('https://dolarapi.com/v1/dolares');
+  if (!ok) throw new Error(`HTTP ${estado}`);
+  const r = interpretarDolarApi(JSON.parse(cuerpo));
+  if (!r) throw new Error('no se reconocieron el oficial ni el blue');
+  return `oficial ${r.oficial?.promedio}  ·  blue ${r.blue?.promedio}`;
+});
+
 console.log('\n=== RESPALDO ===\n');
+
+await revisar('Argentina (bluelytics)', false, async () => {
+  const { cuerpo, estado, ok } = await pedir('https://api.bluelytics.com.ar/v2/latest');
+  if (!ok) throw new Error(`HTTP ${estado}`);
+  const d = JSON.parse(cuerpo);
+  return `oficial ${d.oficial?.value_avg}  ·  blue ${d.blue?.value_avg}`;
+});
 
 await revisar('BCE vía frankfurter', false, async () => {
   const { cuerpo, estado, ok } = await pedir('https://api.frankfurter.dev/v1/latest?base=USD&symbols=EUR,JPY,GBP,CAD,SEK,CHF');
@@ -102,6 +124,8 @@ console.log('  BEVSA        login con MFA detrás de Cloudflare: no se puede aut
 console.log('  Yahoo        429 a IPs de datacenter, en query1 y query2');
 console.log('  Stooq        404 en todos los símbolos, en .com y en .pl');
 console.log('  goldprice    403 Forbidden');
+console.log('  swissquote   no lista USD/BRL ni USD/ARS: devuelve []');
+console.log('  awesomeapi   429 por cuota agotada desde IPs compartidas');
 
 const rotas = resultados.filter((r) => !r.ok);
 const criticas = rotas.filter((r) => r.critica);
