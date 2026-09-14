@@ -25,23 +25,40 @@ que tengas bajados de la última vez.
 
 ## Cómo funciona
 
-No hay servidor. La página **no consulta ninguna fuente**: lee `datos.js`, que
-es un archivo que un job de GitHub Actions reescribe cada dos horas.
+Hay dos motores, y conviene saber cuál da qué.
+
+**El servidor local es el que da frescura.** Corre en la Mac, consulta las
+fuentes cada 10 minutos y escribe archivos `*.local.*` que no están
+versionados. La página los prefiere cuando son más nuevos.
+
+**GitHub Actions es el respaldo.** Corre cada hora y commitea al repositorio,
+para que la serie siga creciendo aunque la Mac esté apagada. Sus tareas
+programadas son mejor esfuerzo: se retrasan y se saltean corridas, así que no
+se le confía el dato del momento.
 
 ```
-GitHub Actions (cron 0 */2 * * *)
-  └─ scripts/actualizar.mjs
-       ├─ api.gold-api.com      → oro (XAU) y plata (XAG)
-       ├─ api.frankfurter.dev   → EUR, JPY, GBP, CAD, SEK, CHF (tasas del BCE)
-       │                          de ahí salen EUR/USD, USD/JPY y el DXY calculado
-       └─ cotizaciones.bcu.gub.uy → dólar uruguayo (SOAP)
-     escribe datos.js, datos.json, historico.json
-  └─ commitea los cambios al repo
+Servidor local (cada 10 min)          GitHub Actions (cada hora)
+  └─ actualizar.mjs SALIDA_LOCAL=1      └─ actualizar.mjs
+       escribe *.local.* (sin versionar)     escribe datos.js / historico.json
+                                             y commitea
+                    ↓                                   ↓
+              la página toma el más reciente de los dos
+
+fuentes
+  ├─ api.gold-api.com          → oro (XAU) y plata (XAG), precio vivo
+  ├─ forex-data-feed.swissquote.com → EUR/USD, USD/JPY, GBP/USD, USD/CAD,
+  │                              USD/SEK, USD/CHF — vivos; de ahí sale el DXY
+  ├─ api.frankfurter.dev       → respaldo de divisas (BCE, una vez por día hábil)
+  └─ cotizaciones.bcu.gub.uy   → dólar uruguayo (SOAP)
 ```
 
 Un HTML no puede consultar estas fuentes por su cuenta: el navegador bloquea
 por CORS cualquier pedido a otro dominio. Todo tablero "en vivo" hecho con un
 solo archivo HTML choca contra esto.
+
+Una consulta local que falla **no escribe nada**: si escribiera un snapshot
+vacío, al ser el más reciente la página lo preferiría y taparía datos buenos
+con "sin dato".
 
 ## Por qué estas fuentes y no otras
 
@@ -51,7 +68,8 @@ GitHub Actions. Verificado con `scripts/sondeo.mjs` el 2026-09-14:
 | Fuente | Resultado | Veredicto |
 |---|---|---|
 | api.gold-api.com | 200, precio al segundo | ✅ en uso |
-| api.frankfurter.dev | 200, canasta completa | ✅ en uso |
+| forex-data-feed.swissquote.com | 200, bid/ask vivos en los 6 pares | ✅ en uso |
+| api.frankfurter.dev | 200, pero una tasa por día hábil | ✅ solo de respaldo |
 | cotizaciones.bcu.gub.uy | 200, SOAP | ✅ en uso |
 | Yahoo Finance (query1 y query2) | 429 Too Many Requests | ❌ bloquea IPs de datacenter |
 | Stooq (.com y .pl) | 404 en todos los símbolos | ❌ bloquea IPs de datacenter |
@@ -105,7 +123,8 @@ gratuitas publica el valor previo.
 | `scripts/parseo.mjs` | Interpretación de números, del SOAP del BCU y cálculo del DXY. |
 | `scripts/probar-parseo.mjs` | Pruebas, sin red. |
 | `scripts/sondeo.mjs` | Diagnóstico: qué fuentes responden desde dónde. |
-| `servidor.mjs` | Servidor local, sin dependencias. Sirve la carpeta y baja datos cada media hora. |
+| `servidor.mjs` | Servidor local. Consulta las fuentes cada 10 min y baja del repo cada 30. |
+| `*.local.*` | Datos que escribe el servidor local. No versionados; la página los prefiere si son más nuevos. |
 | `Instalar servicio.command` | Deja el tablero siempre disponible en 127.0.0.1:8787. |
 | `Desinstalar servicio.command` | Saca el servicio. No borra archivos. |
 
@@ -122,13 +141,13 @@ Requiere Node 20 o superior (usa `fetch` nativo). Sin `npm install`.
 
 ## Límites conocidos
 
-- **Los datos no son en tiempo real.** Se refrescan cada dos horas. Oro y plata
-  vienen al segundo; el resto no.
-- **Las divisas se mueven una vez por día hábil**: el BCE publica una tasa
-  diaria. Entre corridas del mismo día, EUR/USD y el DXY no cambian.
-- **El BCU publica por día hábil**, así que el dólar uruguayo tampoco se mueve
-  cada dos horas. Se pide una ventana de diez días para que un feriado no deje
-  la consulta vacía.
+- **Con el servidor local instalado, los datos se refrescan cada 10 minutos.**
+  Sin él, dependés del cron de Actions, que es impuntual por diseño.
+- **El BCU publica por día hábil**, así que el dólar uruguayo no se mueve
+  durante el día por más que todo lo demás sí. Se pide una ventana de diez días
+  para que un feriado no deje la consulta vacía.
+- **Si Swissquote se cae**, las divisas caen al respaldo del BCE y vuelven a
+  moverse una vez por día. El tablero lo dice en la fuente de cada tarjeta.
 - **El oro no cotiza 24/7.** Cierra el viernes por la tarde de Nueva York y
   abre el domingo. El fin de semana el valor se repite.
 - **Los cron de GitHub Actions no son puntuales** y se deshabilitan solos si el

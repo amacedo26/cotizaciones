@@ -125,6 +125,9 @@
 </div>
 
 <script src="datos.js"></script>
+<!-- Lo escribe el servidor local cada pocos minutos. No está versionado, así
+     que puede no existir: un <script> que falta no rompe nada. -->
+<script src="datos.local.js"></script>
 <script>
 (function () {
   var DECIMALES = { oro: 2, plata: 2, dxy: 2, eurusd: 4, usdjpy: 2, uyu: 3 };
@@ -285,17 +288,44 @@
       : '';
   }
 
-  pintar(window.__COTIZACIONES__ || null);
+  // Entre lo que dejó el robot y lo que trajo el servidor local, gana lo más
+  // reciente. Si no hay servidor local, simplemente no existe el segundo.
+  function tieneDatos(d) {
+    if (!d) return false;
+    if (d.bcu && d.bcu.promedio !== null && d.bcu.promedio !== undefined) return true;
+    var m = d.mercado || {};
+    return Object.keys(m).some(function (k) {
+      return m[k] && m[k].precio !== null && m[k].precio !== undefined;
+    });
+  }
+
+  function masFresco(a, b) {
+    // Un snapshot vacío no gana por ser más nuevo: taparía datos buenos.
+    var ha = tieneDatos(a), hb = tieneDatos(b);
+    if (ha && !hb) return a;
+    if (hb && !ha) return b;
+    if (!ha && !hb) return a || b || null;
+    return Date.parse(b.actualizado) > Date.parse(a.actualizado) ? b : a;
+  }
+
+  pintar(masFresco(window.__COTIZACIONES__, window.__COTIZACIONES_LOCAL__));
 
   // Abierto con doble clic (file://) no se puede refrescar: fetch local lo bloquea
   // el navegador. Servido por HTTP sí, y ahí conviene releer por si entró un cron.
   if (location.protocol === 'http:' || location.protocol === 'https:') {
     setInterval(function () {
-      fetch('datos.json?t=' + Date.now(), { cache: 'no-store' })
-        .then(function (r) { return r.ok ? r.json() : null; })
-        .then(function (d) { if (d) pintar(d); })
+      var pedidos = ['datos.local.json', 'datos.json'].map(function (archivo) {
+        return fetch(archivo + '?t=' + Date.now(), { cache: 'no-store' })
+          .then(function (r) { return r.ok ? r.json() : null; })
+          .catch(function () { return null; });
+      });
+      Promise.all(pedidos)
+        .then(function (rs) {
+          var d = masFresco(rs[1], rs[0]);
+          if (d) pintar(d);
+        })
         .catch(function () { /* sin red: se queda con lo último pintado */ });
-    }, 5 * 60 * 1000);
+    }, 2 * 60 * 1000);
   }
 })();
 </script>

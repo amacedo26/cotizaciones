@@ -5,7 +5,7 @@ name: Cotizaciones
 # tablero deja de actualizarse sin motivo, revisar eso primero.
 on:
   schedule:
-    - cron: '0 */2 * * *'   # cada dos horas, en UTC
+    - cron: '0 * * * *'   # cada hora, en UTC
   workflow_dispatch:         # botón para correrlo a mano desde la pestaña Actions
     inputs:
       modo:

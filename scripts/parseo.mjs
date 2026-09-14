@@ -173,3 +173,22 @@ export function calcularDxy(tasas) {
   }
   return +producto.toFixed(3);
 }
+
+// --- Swissquote --------------------------------------------------------------
+// Devuelve varios perfiles de precio (tiers comerciales) cuyo medio es casi
+// idéntico. Se toma el de spread más ajustado, que es la mejor cotización
+// disponible y además hace la elección determinista.
+export function interpretarSwissquote(payload) {
+  const perfiles = payload?.[0]?.spreadProfilePrices;
+  if (!Array.isArray(perfiles) || !perfiles.length) return null;
+
+  let mejor = null;
+  for (const p of perfiles) {
+    const bid = aNumero(p?.bid);
+    const ask = aNumero(p?.ask);
+    if (bid === null || ask === null || bid <= 0 || ask <= 0) continue;
+    const spread = Math.abs(ask - bid);
+    if (!mejor || spread < mejor.spread) mejor = { spread, medio: (bid + ask) / 2 };
+  }
+  return mejor ? +mejor.medio.toFixed(6) : null;
+}

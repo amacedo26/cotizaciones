@@ -3,7 +3,7 @@
 //   node scripts/probar-parseo.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { aNumero, interpretarBevsa, interpretarBcu, calcularDxy, podar } from './parseo.mjs';
+import { aNumero, interpretarBevsa, interpretarBcu, interpretarSwissquote, calcularDxy, podar } from './parseo.mjs';
 
 test('aNumero entiende los formatos de número que puede mandar el endpoint', () => {
   assert.equal(aNumero(41.25), 41.25);
@@ -126,4 +126,43 @@ test('DXY: sin la canasta completa devuelve null en vez de un número inventado'
   assert.equal(calcularDxy({ EUR: 0.86, JPY: 154 }), null);
   assert.equal(calcularDxy({}), null);
   assert.equal(calcularDxy(null), null);
+});
+
+// Forma real de la respuesta, registrada con scripts/sondeo.mjs el 2026-09-14.
+test('Swissquote: toma el medio del perfil con spread más ajustado', () => {
+  const r = interpretarSwissquote([{
+    topo: { platform: 'SwissquoteLtd', server: 'Live5' },
+    spreadProfilePrices: [
+      { spreadProfile: 'premium', bid: 1.15558, ask: 1.15572 },  // spread 0.00014
+      { spreadProfile: 'prime',   bid: 1.15560, ask: 1.15570 },  // spread 0.00010, gana
+      { spreadProfile: 'elite',   bid: 1.15550, ask: 1.15580 },
+    ],
+  }]);
+  assert.equal(r, 1.15565);
+});
+
+test('Swissquote: un solo perfil, como devuelve la plataforma AT', () => {
+  const r = interpretarSwissquote([{
+    topo: { platform: 'AT', server: 'AT' },
+    spreadProfilePrices: [{ spreadProfile: 'standard', bid: 0.81623, ask: 0.81644 }],
+  }]);
+  assert.ok(Math.abs(r - 0.816335) < 1e-6, `dio ${r}`);
+});
+
+test('Swissquote: respuestas rotas devuelven null, no un precio inventado', () => {
+  assert.equal(interpretarSwissquote([]), null);
+  assert.equal(interpretarSwissquote(null), null);
+  assert.equal(interpretarSwissquote([{ spreadProfilePrices: [] }]), null);
+  assert.equal(interpretarSwissquote([{ spreadProfilePrices: [{ bid: null, ask: 1.2 }] }]), null);
+  assert.equal(interpretarSwissquote([{ spreadProfilePrices: [{ bid: 0, ask: 0 }] }]), null);
+});
+
+test('DXY con las cotizaciones vivas de Swissquote', () => {
+  // valores del sondeo del 2026-09-14 19:01 UTC, convertidos a "moneda por dólar"
+  const dxy = calcularDxy({
+    EUR: 1 / 1.15565, JPY: 154.0765, GBP: 1 / 1.35113,
+    CAD: 1.39019, SEK: 9.7417, CHF: 0.81634,
+  });
+  assert.ok(dxy > 95 && dxy < 105, `fuera del rango razonable: ${dxy}`);
+  console.log('    DXY con datos vivos:', dxy);
 });

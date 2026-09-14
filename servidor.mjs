@@ -16,7 +16,8 @@ import { fileURLToPath } from 'node:url';
 
 const RAIZ = dirname(fileURLToPath(import.meta.url));
 const PUERTO = Number(process.env.PUERTO || 8787);
-const CADA = 30 * 60 * 1000;
+const CADA_DATOS = 10 * 60 * 1000;  // consultar las fuentes: esto da la frescura
+const CADA_PULL = 30 * 60 * 1000;   // bajar del repo: código y serie larga
 
 const TIPOS = {
   '.html': 'text/html; charset=utf-8',
@@ -31,7 +32,28 @@ const TIPOS = {
 const momento = () => new Date().toLocaleString('es-UY', { timeZone: 'America/Montevideo' });
 const registrar = (msg) => console.log(`[${momento()}] ${msg}`);
 
-// --- bajar datos -------------------------------------------------------------
+// --- consultar las fuentes ---------------------------------------------------
+// Acá está la frescura del tablero. Las tareas programadas de GitHub Actions
+// son mejor esfuerzo y se saltean corridas, así que no se les confía el dato
+// del momento: esta máquina consulta las fuentes por su cuenta y escribe
+// archivos .local, que no están versionados y nunca chocan con el repositorio.
+let ultimaConsulta = { cuando: null, ok: null, detalle: 'todavía no corrió' };
+
+function consultarFuentes() {
+  execFile(process.execPath, [join(RAIZ, 'scripts', 'actualizar.mjs')],
+    { cwd: RAIZ, timeout: 120_000, env: { ...process.env, SALIDA_LOCAL: '1' } },
+    (error, salida, err) => {
+      const ultimaLinea = (texto) => (texto || '').trim().split('\n').pop() || '';
+      // el detalle útil suele estar en stdout aunque el proceso termine en error
+      ultimaConsulta = error
+        ? { cuando: new Date().toISOString(), ok: false,
+            detalle: (ultimaLinea(err) || ultimaLinea(salida) || error.message).slice(0, 300) }
+        : { cuando: new Date().toISOString(), ok: true, detalle: ultimaLinea(salida) };
+      registrar(ultimaConsulta.ok ? `datos frescos — ${ultimaConsulta.detalle}` : `falló la consulta: ${ultimaConsulta.detalle}`);
+    });
+}
+
+// --- bajar del repositorio ---------------------------------------------------
 // Un fallo acá no se puede quedar callado: el tablero seguiría mostrando datos
 // viejos con cara de frescos. Queda en el log y en la respuesta de /estado.
 let ultimoPull = { cuando: null, ok: null, detalle: 'todavía no corrió' };
@@ -61,7 +83,7 @@ async function resolver(url) {
 const servidor = createServer(async (pedido, respuesta) => {
   if (pedido.url === '/estado') {
     respuesta.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-    return respuesta.end(JSON.stringify({ puerto: PUERTO, carpeta: RAIZ, ultimoPull }, null, 2));
+    return respuesta.end(JSON.stringify({ puerto: PUERTO, carpeta: RAIZ, ultimaConsulta, ultimoPull }, null, 2));
   }
 
   const ruta = await resolver(pedido.url);
@@ -74,7 +96,7 @@ const servidor = createServer(async (pedido, respuesta) => {
     const contenido = await readFile(ruta);
     const tipo = TIPOS[extname(ruta).toLowerCase()] || 'application/octet-stream';
     // los datos nunca se cachean: si no, el refresco del tablero sirve de poco
-    const cache = /datos\.(js|json)$/.test(ruta) ? 'no-store' : 'no-cache';
+    const cache = /datos(\.local)?\.(js|json)$/.test(ruta) ? 'no-store' : 'no-cache';
     respuesta.writeHead(200, { 'Content-Type': tipo, 'Cache-Control': cache });
     respuesta.end(contenido);
   } catch (e) {
@@ -94,6 +116,8 @@ servidor.on('error', (e) => {
 
 servidor.listen(PUERTO, '127.0.0.1', () => {
   registrar(`tablero en http://127.0.0.1:${PUERTO} — sirviendo ${RAIZ}`);
+  consultarFuentes();
   bajarDatos();
-  setInterval(bajarDatos, CADA);
+  setInterval(consultarFuentes, CADA_DATOS);
+  setInterval(bajarDatos, CADA_PULL);
 });
