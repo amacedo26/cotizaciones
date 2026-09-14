@@ -1,6 +1,10 @@
 #!/bin/bash
-# Doble clic para sacar el servicio del tablero.
-# No borra nada de la carpeta: solo deja de arrancar solo.
+# Doble clic para sacar el servicio local que usaba este tablero antes de
+# mudarse a Netlify. Ya no hace falta: el tablero vive en
+# https://cotizaciones-amr.netlify.app y se actualiza solo cada 10 minutos.
+#
+# Importante sacarlo: ese servicio tenía permiso para empujar commits a este
+# repositorio, y tras la mudanza el archivo que ejecutaba ya no existe.
 
 set -u
 cd "$(dirname "$0")" || exit 1
@@ -10,6 +14,7 @@ PLIST="$HOME/Library/LaunchAgents/$ETIQUETA.plist"
 launchctl bootout "gui/$(id -u)/$ETIQUETA" 2>/dev/null || launchctl unload "$PLIST" 2>/dev/null
 rm -f "$PLIST"
 
-echo "✓ Servicio desinstalado. El favorito a 127.0.0.1:8787 deja de funcionar."
-echo "  Los archivos del tablero siguen acá; se puede abrir index.html con doble clic."
+echo "✓ Servicio desinstalado."
+echo "  El tablero está en https://cotizaciones-amr.netlify.app"
+echo "  Ya no hay nada corriendo en esta Mac."
 read -r -p "Enter para cerrar."
