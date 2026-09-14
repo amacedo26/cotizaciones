@@ -24,6 +24,15 @@ public/index.html  →  pide /api/datos  →  lee de Blobs
 El tablero es público: cualquiera con la URL lo ve. Son cotizaciones de
 mercado, información pública.
 
+**Este repositorio también es público, y por una razón concreta.** El plan
+Free de Netlify solo construye repos privados cuando quien empuja es un
+miembro verificado de la cuenta; cualquier otro push queda bloqueado con
+"Unrecognized Git contributor" y el sitio se congela en la última versión que
+sí construyó. Hacerlo público levanta esa restricción. No hay nada sensible
+acá: todas las fuentes son abiertas y no hay ninguna clave ni token. Si algún
+día hace falta guardar un secreto, va como variable de entorno en Netlify,
+nunca en el repositorio.
+
 ## Rutas
 
 | Ruta | Qué devuelve |
