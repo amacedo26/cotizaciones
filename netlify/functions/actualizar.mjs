@@ -2,7 +2,7 @@
 //
 // Las tareas programadas solo corren en deploys publicados: en previews y
 // ramas no se dispara.
-import { reunirDatos, puntoDe, tieneAlgo } from '../../lib/fuentes.mjs';
+import { reunirDatos, puntoDe, tieneAlgo, aplicarVariaciones } from '../../lib/fuentes.mjs';
 import { fusionarHistoricos } from '../../lib/parseo.mjs';
 import { SEMILLA } from '../../lib/semilla.mjs';
 import { almacen, CLAVE_FOTO, CLAVE_SERIE, CLAVE_BITACORA } from '../../lib/almacen.mjs';
@@ -27,6 +27,9 @@ export default async (req) => {
     const serie = tieneAlgo(punto)
       ? fusionarHistoricos(previa, [punto])
       : previa;
+
+    // contra el último punto anterior a esta corrida, no contra sí mismo
+    aplicarVariaciones(foto, punto, previa.length ? previa[previa.length - 1] : null);
 
     await store.setJSON(CLAVE_SERIE, serie);
     await store.setJSON(CLAVE_FOTO, { ...foto, puntos: serie.length });

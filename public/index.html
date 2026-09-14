@@ -326,6 +326,7 @@
     document.getElementById('sello').innerHTML =
       'Actualizado <strong class="' + (viejo ? 'viejo' : '') + '">' + hace(D.actualizado) + '</strong>' +
       ' · ' + reloj(D.actualizado) + ' (Montevideo)' +
+      (D.comparadoCon ? ' · variación contra ' + reloj(D.comparadoCon) : '') +
       (viejo ? ' <span class="viejo">— el cron no corrió a horario</span>' : '');
 
     // Dólar uruguayo: el BCU es la fuente automática; BEVSA solo aparece si
@@ -344,7 +345,7 @@
     }
     document.getElementById('tarjeta-uyu').innerHTML =
       '<div class="nombre">Banco Central del Uruguay</div>' +
-      '<div class="valor">' + prom + '</div>' +
+      '<div class="valor">' + prom + ' ' + delta(b.variacion) + '</div>' +
       '<div class="unidad">pesos por dólar' + (b.nombre ? ' · ' + b.nombre.toLowerCase() : '') + '</div>' +
       puntas +
       '<div class="pie">' + (b.estado === 'ok'
@@ -361,25 +362,31 @@
     var tarjetas = [];
 
     tarjetas.push('<div class="tarjeta"><div class="nombre">Brasil — real</div>' +
-      '<div class="valor">' + (num(br.valor, DECIMALES.brl) || '<span class="sd">sin dato</span>') + '</div>' +
+      '<div class="valor">' + (num(br.valor, DECIMALES.brl) || '<span class="sd">sin dato</span>') +
+        ' ' + delta(br.variacion) + '</div>' +
       '<div class="unidad">reales por dólar</div>' +
       '<div class="pie">' + (br.estado === 'ok'
-        ? (br.fuente + (br.vivo ? ' · precio de mercado' : ' · referencia diaria')) 
+        ? (br.fuente + (br.vivo ? '' : ' · referencia diaria') +
+           (br.momento ? ' · ' + reloj(br.momento) : ''))
         : '<span class="viejo">no se pudo leer</span>') + '</div></div>');
 
     if (ar.oficial) {
       tarjetas.push('<div class="tarjeta"><div class="nombre">Argentina — oficial</div>' +
-        '<div class="valor">' + num(ar.oficial.promedio, DECIMALES.ars) + '</div>' +
+        '<div class="valor">' + num(ar.oficial.promedio, DECIMALES.ars) +
+          ' ' + delta(ar.oficial.variacion) + '</div>' +
         '<div class="unidad">pesos argentinos por dólar</div>' +
-        '<div class="pie">' + (ar.fuente || '') + '</div></div>');
+        '<div class="pie">' + (ar.fuente || '') +
+          (ar.oficial.fecha ? ' · ' + reloj(ar.oficial.fecha) : '') + '</div></div>');
     }
 
     if (ar.blue) {
       tarjetas.push('<div class="tarjeta informal"><div class="nombre">Argentina — blue' +
         '<span class="etiqueta">informal</span></div>' +
-        '<div class="valor">' + num(ar.blue.promedio, DECIMALES.ars) + '</div>' +
+        '<div class="valor">' + num(ar.blue.promedio, DECIMALES.ars) +
+          ' ' + delta(ar.blue.variacion) + '</div>' +
         '<div class="unidad">pesos argentinos por dólar</div>' +
-        '<div class="pie">' + (ar.fuente || '') + ' · sin fuente oficial</div></div>');
+        '<div class="pie">' + (ar.fuente || '') + ' · sin fuente oficial' +
+          (ar.blue.fecha ? ' · ' + reloj(ar.blue.fecha) : '') + '</div></div>');
     }
 
     if (ar.brecha !== null && ar.brecha !== undefined) {

@@ -82,7 +82,9 @@ etiquetados como tales en pantalla:
   No es una cotización de mercado.
 
 La **variación** de cada tarjeta se calcula contra la corrida anterior propia:
-ninguna de estas fuentes gratuitas publica el valor previo.
+ninguna de estas fuentes gratuitas publica el valor previo. El encabezado dice
+contra qué momento se está comparando, porque tras un corte la comparación
+puede ser contra algo viejo y un salto grande parecería un error de datos.
 
 ## El dólar blue
 
