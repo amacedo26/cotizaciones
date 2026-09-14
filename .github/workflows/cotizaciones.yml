@@ -11,7 +11,7 @@ on:
       modo:
         description: 'actualizar = corrida normal; sondeo = diagnóstico de fuentes, no escribe nada'
         type: choice
-        options: [actualizar, sondeo]
+        options: [actualizar, sondeo, candidatos]
         default: actualizar
 
 permissions:
@@ -34,16 +34,20 @@ jobs:
       - name: Probar el parser
         run: node --test scripts/probar-parseo.mjs
 
-      - name: Sondear fuentes candidatas
+      - name: Revisar las fuentes en producción
         if: inputs.modo == 'sondeo'
         run: node scripts/sondeo.mjs
 
+      - name: Explorar fuentes nuevas
+        if: inputs.modo == 'candidatos'
+        run: node scripts/candidatos.mjs
+
       - name: Consultar fuentes
-        if: inputs.modo != 'sondeo'
+        if: inputs.modo == 'actualizar' || inputs.modo == ''
         run: node scripts/actualizar.mjs
 
       - name: Commitear si algo cambió
-        if: inputs.modo != 'sondeo'
+        if: inputs.modo == 'actualizar' || inputs.modo == ''
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
