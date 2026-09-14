@@ -4,7 +4,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { aNumero, interpretarBevsa, interpretarBcu, interpretarSwissquote, interpretarDolarApi,
-         interpretarBluelytics, calcularBrecha, calcularDxy, fusionarHistoricos, podar } from '../lib/parseo.mjs';
+         interpretarBluelytics, calcularBrecha, calcularDxy, fusionarHistoricos, podar,
+         contrastarArgentina } from '../lib/parseo.mjs';
 
 test('aNumero entiende los formatos de número que puede mandar el endpoint', () => {
   assert.equal(aNumero(41.25), 41.25);
@@ -244,4 +245,37 @@ test('fusionar: tolera series vacías o con basura', () => {
   assert.deepEqual(fusionarHistoricos(null, null, ahora), []);
   assert.deepEqual(fusionarHistoricos([], [], ahora), []);
   assert.equal(fusionarHistoricos([{ sinFecha: 1 }, null], [{ t: '2026-09-14T19:00:00.000Z' }], ahora).length, 1);
+});
+
+test('contraste: los valores reales del 2026-09-14 no disparan el aviso', () => {
+  // dolarapi daba oficial 1505 / blue 1545; bluelytics 1505 / 1538,5
+  const r = contrastarArgentina(interpretarDolarApi(DOLARAPI), interpretarBluelytics(BLUELYTICS));
+  assert.equal(r.estado, 'ok');
+  assert.equal(r.difOficial, 0);
+  assert.equal(r.difBlue, 0.42);      // el ruido normal entre relevamientos
+  assert.equal(r.discrepa, false);
+});
+
+test('contraste: una diferencia grande en el oficial sí avisa', () => {
+  const otra = JSON.parse(JSON.stringify(BLUELYTICS));
+  otra.oficial.value_avg = 1580;      // 5 % arriba
+  const r = contrastarArgentina(interpretarDolarApi(DOLARAPI), interpretarBluelytics(otra));
+  assert.equal(r.discrepaOficial, true);
+  assert.equal(r.discrepa, true);
+  assert.equal(r.discrepaBlue, false);
+});
+
+test('contraste: el blue tolera más ruido antes de avisar', () => {
+  const casi = JSON.parse(JSON.stringify(BLUELYTICS));
+  casi.blue.value_avg = 1565;         // 1,3 % — por debajo del umbral
+  assert.equal(contrastarArgentina(interpretarDolarApi(DOLARAPI), interpretarBluelytics(casi)).discrepaBlue, false);
+  const lejos = JSON.parse(JSON.stringify(BLUELYTICS));
+  lejos.blue.value_avg = 1480;        // 4,4 %
+  assert.equal(contrastarArgentina(interpretarDolarApi(DOLARAPI), interpretarBluelytics(lejos)).discrepaBlue, true);
+});
+
+test('contraste: sin segunda fuente no inventa un veredicto', () => {
+  const r = contrastarArgentina(interpretarDolarApi(DOLARAPI), null);
+  assert.equal(r.estado, 'sin contraste');
+  assert.equal(r.discrepa, undefined);
 });

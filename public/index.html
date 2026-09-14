@@ -129,6 +129,7 @@
   </div>
   <div class="rejilla" id="rejilla-region"></div>
   <div class="rejilla" id="rejilla-bevsa"></div>
+  <div id="aviso-argentina"></div>
   <p class="nota" id="nota-region"></p>
 
   <h2>Metales y dólar internacional</h2>
@@ -409,8 +410,36 @@
     }
 
     document.getElementById('rejilla-region').innerHTML = tarjetas.join('');
-    document.getElementById('nota-region').textContent = ar.blue
-      ? 'El dólar blue no tiene fuente oficial: sale de agregadores que relevan el mercado informal, y el valor difiere entre uno y otro. Por eso se muestra de dónde salió.'
+    // El contraste con la segunda fuente: en silencio cuando coinciden, a la
+    // vista cuando no. Un aviso que aparece siempre deja de mirarse.
+    var c = ar.contraste || {};
+    var nota = '';
+    if (ar.blue) {
+      nota = 'El dólar blue no tiene fuente oficial: sale de agregadores que relevan el mercado ' +
+             'informal, y el valor difiere entre uno y otro. Por eso se muestra de dónde salió.';
+      if (c.estado === 'ok' && !c.discrepa) {
+        nota += ' Contrastado con ' + c.fuente + ': coinciden.';
+      } else if (c.estado === 'sin contraste') {
+        nota += ' Sin segunda fuente para contrastar en esta corrida.';
+      }
+    }
+    document.getElementById('nota-region').textContent = nota;
+
+    var avisos = [];
+    if (c.discrepaOficial) {
+      avisos.push('<li><strong>Oficial:</strong> ' + ar.fuente + ' dice ' +
+        num(ar.oficial && ar.oficial.promedio, DECIMALES.ars) + ' y ' + c.fuente + ' dice ' +
+        num(c.oficial, DECIMALES.ars) + ' — ' + num(c.difOficial, 2) + '% de diferencia.</li>');
+    }
+    if (c.discrepaBlue) {
+      avisos.push('<li><strong>Blue:</strong> ' + ar.fuente + ' dice ' +
+        num(ar.blue && ar.blue.promedio, DECIMALES.ars) + ' y ' + c.fuente + ' dice ' +
+        num(c.blue, DECIMALES.ars) + ' — ' + num(c.difBlue, 2) + '% de diferencia.</li>');
+    }
+    document.getElementById('aviso-argentina').innerHTML = avisos.length
+      ? '<div class="aviso"><strong>Las dos fuentes de Argentina no coinciden.</strong>' +
+        '<ul>' + avisos.join('') + '</ul>' +
+        'Puede ser que una se haya quedado vieja. Conviene verificar antes de usar el número.</div>'
       : '';
 
     var bv = D.bevsa || {};

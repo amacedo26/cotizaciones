@@ -102,6 +102,26 @@ No tiene fuente oficial. Sale de agregadores que relevan el mercado informal y
 compra 1535 donde bluelytics daba 1522. Por eso el tablero lo marca como
 informal y muestra de qué agregador salió.
 
+Por lo mismo se consultan **las dos** fuentes en cada corrida, no una como
+respaldo de la otra: bluelytics sirve de contraste. Si los valores se separan
+más de lo razonable, el tablero lo avisa en pantalla y queda registrado en las
+incidencias. Los umbrales son distintos según el tipo, y salen de lo observado
+el 2026-09-14 en una consulta normal:
+
+| | umbral | por qué |
+|---|---|---|
+| Oficial | 0,5 % | es un precio publicado: las fuentes deberían coincidir, y coincidían exacto |
+| Blue | 1,5 % | es un relevamiento del mercado informal: difería 0,42 % sin que pasara nada raro |
+
+Un umbral más fino haría saltar el aviso todos los días, y un aviso que aparece
+siempre deja de mirarse.
+
+**El oficial argentino no se mueve durante el día y eso no es una falla.** No es
+un precio de mercado continuo: se fija un par de veces por jornada y después
+queda quieto. El blue sí sigue al mercado informal durante la tarde. Por eso
+cada tarjeta muestra la hora que declara la fuente, no la de la corrida: si
+dice la una de la tarde, es que la fuente no tiene nada más nuevo.
+
 ## Desarrollo
 
 ```bash
