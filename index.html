@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cotizaciones — oro, dólar internacional y BEVSA</title>
+<style>
+  :root {
+    --fondo: #0e1116;
+    --panel: #161b22;
+    --panel-alto: #1c232d;
+    --borde: #262d38;
+    --texto: #e6edf3;
+    --tenue: #8b949e;
+    --sube: #3fb950;
+    --baja: #f85149;
+    --alerta: #d29922;
+    --acento: #58a6ff;
+    --oro: #d4af37;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--fondo);
+    color: var(--texto);
+    font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .envoltorio { max-width: 1080px; margin: 0 auto; padding: 32px 20px 64px; }
+
+  header { display: flex; flex-wrap: wrap; gap: 12px; align-items: baseline; justify-content: space-between; margin-bottom: 28px; }
+  h1 { font-size: 22px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
+  h2 { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--tenue); margin: 36px 0 14px; }
+  .sello { font-size: 13px; color: var(--tenue); }
+  .sello strong { color: var(--texto); font-weight: 500; }
+  .viejo { color: var(--alerta); }
+
+  .rejilla { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
+
+  .tarjeta {
+    background: var(--panel);
+    border: 1px solid var(--borde);
+    border-radius: 10px;
+    padding: 16px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+  }
+  .tarjeta .nombre { font-size: 13px; color: var(--tenue); }
+  .tarjeta .valor { font-size: 27px; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+  .tarjeta .unidad { font-size: 12px; color: var(--tenue); }
+  .tarjeta .pie { font-size: 11px; color: var(--tenue); margin-top: auto; padding-top: 8px; }
+  .delta { font-size: 13px; font-variant-numeric: tabular-nums; font-weight: 600; }
+  .delta.sube { color: var(--sube); }
+  .delta.baja { color: var(--baja); }
+  .delta.plano { color: var(--tenue); }
+
+  .destacado { border-color: #2f3a48; background: var(--panel-alto); }
+  .destacado .valor { color: var(--acento); }
+  .oro .valor { color: var(--oro); }
+
+  .bevsa { display: grid; grid-template-columns: 1.2fr 1fr; gap: 14px; align-items: stretch; }
+  .bevsa .puntas { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 6px; }
+  .punta { background: rgba(255,255,255,.03); border-radius: 7px; padding: 9px 11px; }
+  .punta span { display: block; font-size: 11px; color: var(--tenue); }
+  .punta b { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+  #chispa-uyu { height: 110px; margin-top: 4px; }
+  svg.chispa { width: 100%; height: 100%; display: block; }
+
+  .aviso {
+    border: 1px solid #3d2f12; background: #1d1708; color: #e3b341;
+    border-radius: 9px; padding: 13px 16px; font-size: 13px; margin-top: 18px;
+  }
+  .aviso ul { margin: 8px 0 0; padding-left: 18px; }
+  .aviso li { margin: 3px 0; word-break: break-word; }
+  .aviso summary { cursor: pointer; }
+
+  .nota { font-size: 12px; color: var(--tenue); margin-top: 10px; }
+  footer { margin-top: 44px; padding-top: 18px; border-top: 1px solid var(--borde); font-size: 12px; color: var(--tenue); }
+  footer code { background: var(--panel); padding: 1px 5px; border-radius: 4px; }
+  .sd { color: var(--tenue); font-weight: 400; font-size: 20px; }
+
+  @media (max-width: 640px) {
+    .bevsa { grid-template-columns: 1fr; }
+    .tarjeta .valor { font-size: 24px; }
+  }
+</style>
+</head>
+<body>
+<div class="envoltorio">
+  <header>
+    <h1>Cotizaciones</h1>
+    <div class="sello" id="sello">cargando…</div>
+  </header>
+
+  <h2>Dólar en Uruguay</h2>
+  <div class="bevsa">
+    <div class="tarjeta destacado" id="tarjeta-uyu"></div>
+    <div class="tarjeta">
+      <div class="nombre">Evolución</div>
+      <div id="chispa-uyu"></div>
+      <div class="pie" id="pie-uyu"></div>
+    </div>
+  </div>
+  <div class="rejilla" id="rejilla-bevsa"></div>
+
+  <h2>Metales y dólar internacional</h2>
+  <div class="rejilla" id="rejilla-mercado"></div>
+
+  <h2>Oro en pesos uruguayos <span style="text-transform:none;letter-spacing:0">(cálculo propio)</span></h2>
+  <div class="rejilla" id="rejilla-derivado"></div>
+  <p class="nota" id="nota-derivado"></p>
+
+  <div id="incidencias"></div>
+
+  <footer>
+    Los datos los escribe <code>scripts/actualizar.mjs</code> cada dos horas vía GitHub Actions.
+    Esta página no consulta ninguna fuente por su cuenta: lee <code>datos.js</code>.
+    Oro y plata: gold-api.com. Divisas: tasas del BCE, que se publican una vez por día hábil.
+    Dólar uruguayo: servicio oficial del Banco Central. El oro no cotiza los fines de semana,
+    así que fuera de rueda el valor se repite.
+  </footer>
+</div>
+
+<script src="datos.js"></script>
+<script>
+(function () {
+  var DECIMALES = { oro: 2, plata: 2, dxy: 2, eurusd: 4, usdjpy: 2, uyu: 3 };
+
+  function num(v, dec) {
+    if (v === null || v === undefined || isNaN(v)) return null;
+    return new Intl.NumberFormat('es-UY', { minimumFractionDigits: dec, maximumFractionDigits: dec }).format(v);
+  }
+
+  function hace(iso) {
+    if (!iso) return 'sin fecha';
+    var min = Math.round((Date.now() - Date.parse(iso)) / 60000);
+    if (isNaN(min)) return 'sin fecha';
+    if (min < 1) return 'recién';
+    if (min < 60) return 'hace ' + min + ' min';
+    var h = Math.floor(min / 60);
+    if (h < 24) return 'hace ' + h + ' h';
+    var d = Math.floor(h / 24);
+    return 'hace ' + d + (d === 1 ? ' día' : ' días');
+  }
+
+  function reloj(iso) {
+    if (!iso) return '';
+    // Las fuentes diarias entregan solo la fecha. Convertirla a un huso la
+    // correría un día hacia atrás, así que se muestra tal cual.
+    if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
+      var p = iso.split('-');
+      return p[2] + '/' + p[1] + '/' + p[0];
+    }
+    try {
+      return new Date(iso).toLocaleString('es-UY', {
+        timeZone: 'America/Montevideo', day: '2-digit', month: '2-digit',
+        hour: '2-digit', minute: '2-digit'
+      });
+    } catch (e) { return iso; }
+  }
+
+  function delta(v) {
+    if (v === null || v === undefined) return '';
+    var clase = v > 0 ? 'sube' : v < 0 ? 'baja' : 'plano';
+    var signo = v > 0 ? '+' : '';
+    return '<span class="delta ' + clase + '">' + signo + num(v, 2) + '%</span>';
+  }
+
+  // Sparkline: se dibuja a mano para no depender de ninguna librería externa.
+  function chispa(valores, color) {
+    var puntos = valores.filter(function (v) { return typeof v === 'number' && isFinite(v); });
+    if (puntos.length < 2) return '<div class="pie">Todavía no hay serie suficiente para graficar.</div>';
+    var min = Math.min.apply(null, puntos), max = Math.max.apply(null, puntos);
+    var rango = max - min || 1, ancho = 100, alto = 100;
+    var d = puntos.map(function (v, i) {
+      var x = (i / (puntos.length - 1)) * ancho;
+      var y = alto - ((v - min) / rango) * (alto - 12) - 6;
+      return (i ? 'L' : 'M') + x.toFixed(2) + ' ' + y.toFixed(2);
+    }).join(' ');
+    return '<svg class="chispa" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">' +
+      '<path d="' + d + '" fill="none" stroke="' + color + '" stroke-width="1.6" ' +
+      'vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"/></svg>';
+  }
+
+  function serie(historico, clave) {
+    return (historico || []).map(function (p) { return p[clave]; });
+  }
+
+  function tarjetaMercado(id, m) {
+    var dec = DECIMALES[id] || 2;
+    var valor = m.precio === null || m.precio === undefined
+      ? '<span class="sd">sin dato</span>'
+      : num(m.precio, dec);
+    return '<div class="tarjeta' + (id === 'oro' ? ' oro' : '') + '">' +
+      '<div class="nombre">' + m.nombre + '</div>' +
+      '<div class="valor">' + valor + ' ' + delta(m.variacion) + '</div>' +
+      '<div class="unidad">' + m.unidad + '</div>' +
+      '<div class="pie">' + (m.fuente ? m.fuente + ' · ' : '') +
+        (m.momento ? reloj(m.momento) : (m.estado === 'error' ? 'fuente caída' : '')) + '</div>' +
+      '</div>';
+  }
+
+  function pintar(D) {
+    if (!D) {
+      document.getElementById('sello').innerHTML = '<span class="viejo">todavía no corrió la actualización</span>';
+      return;
+    }
+    var hist = D.historico || [];
+
+    // sello de frescura: el cron corre cada 2 h, más de 3 h es sospechoso
+    var edadMin = (Date.now() - Date.parse(D.actualizado)) / 60000;
+    var viejo = !(edadMin < 180);
+    document.getElementById('sello').innerHTML =
+      'Actualizado <strong class="' + (viejo ? 'viejo' : '') + '">' + hace(D.actualizado) + '</strong>' +
+      ' · ' + reloj(D.actualizado) + ' (Montevideo)' +
+      (viejo ? ' <span class="viejo">— el cron no corrió a horario</span>' : '');
+
+    // Dólar uruguayo: el BCU es la fuente automática; BEVSA solo aparece si
+    // alguien cargó una cookie de sesión válida, porque su acceso exige login.
+    var b = D.bcu || {};
+    var prom = b.promedio === null || b.promedio === undefined
+      ? '<span class="sd">sin dato</span>' : num(b.promedio, DECIMALES.uyu);
+    // El BCU devuelve compra y venta iguales para varias monedas. Mostrar las
+    // dos puntas idénticas sugiere un spread que no existe, así que se omiten.
+    var puntas = '';
+    if (b.compra !== null && b.venta !== null && b.compra !== b.venta) {
+      puntas = '<div class="puntas">' +
+        '<div class="punta"><span>Compra</span><b>' + (num(b.compra, DECIMALES.uyu) || '—') + '</b></div>' +
+        '<div class="punta"><span>Venta</span><b>' + (num(b.venta, DECIMALES.uyu) || '—') + '</b></div>' +
+        '</div>';
+    }
+    document.getElementById('tarjeta-uyu').innerHTML =
+      '<div class="nombre">Banco Central del Uruguay</div>' +
+      '<div class="valor">' + prom + '</div>' +
+      '<div class="unidad">pesos por dólar' + (b.nombre ? ' · ' + b.nombre.toLowerCase() : '') + '</div>' +
+      puntas +
+      '<div class="pie">' + (b.estado === 'ok'
+        ? ('cotización del ' + (reloj(b.fecha) || 'sin fecha') + ' · se publica por día hábil')
+        : ('<span class="viejo">no se pudo leer: ' + (b.error || b.estado) + '</span>')) + '</div>';
+
+    var conDato = hist.filter(function (p) { return typeof p.bcu === 'number'; });
+    document.getElementById('chispa-uyu').innerHTML = chispa(serie(hist, 'bcu'), '#58a6ff');
+    document.getElementById('pie-uyu').textContent = conDato.length
+      ? conDato.length + (conDato.length === 1 ? ' registro' : ' registros') + ' · desde ' + reloj(conDato[0].t)
+      : 'sin registros todavía';
+
+    var bv = D.bevsa || {};
+    document.getElementById('rejilla-bevsa').innerHTML = bv.estado === 'ok'
+      ? '<div class="tarjeta"><div class="nombre">BEVSA — interbancario</div>' +
+        '<div class="valor">' + (num(bv.promedio, DECIMALES.uyu) || '<span class="sd">sin dato</span>') + '</div>' +
+        '<div class="unidad">pesos por dólar</div>' +
+        '<div class="pie">' + (bv.fecha || 'sin fecha') + '</div></div>'
+      : '';
+
+    // Mercado
+    var orden = ['oro', 'plata', 'dxy', 'eurusd', 'usdjpy'];
+    document.getElementById('rejilla-mercado').innerHTML = orden.map(function (id) {
+      return D.mercado && D.mercado[id] ? tarjetaMercado(id, D.mercado[id]) : '';
+    }).join('');
+
+    // Derivado
+    var d = D.derivado || {};
+    document.getElementById('nota-derivado').textContent = d.baseDolar
+      ? 'No es una cotización de mercado: es el oro en dólares multiplicado por el dólar ' +
+        d.baseDolar + ' de esta misma corrida.'
+      : 'Sin dólar uruguayo disponible en esta corrida, no se puede calcular.';
+    document.getElementById('rejilla-derivado').innerHTML =
+      '<div class="tarjeta oro"><div class="nombre">Onza troy</div><div class="valor">' +
+        (num(d.oroEnPesosPorOnza, 0) || '<span class="sd">sin dato</span>') +
+        '</div><div class="unidad">pesos por onza</div></div>' +
+      '<div class="tarjeta oro"><div class="nombre">Gramo</div><div class="valor">' +
+        (num(d.oroEnPesosPorGramo, 0) || '<span class="sd">sin dato</span>') +
+        '</div><div class="unidad">pesos por gramo</div></div>';
+
+    // Incidencias de la última corrida
+    var inc = D.incidencias || [];
+    document.getElementById('incidencias').innerHTML = inc.length
+      ? '<div class="aviso"><details><summary><strong>' + inc.length +
+        ' incidencia' + (inc.length === 1 ? '' : 's') + ' en la última corrida</strong></summary><ul>' +
+        inc.map(function (i) { return '<li>' + String(i).replace(/[<>&]/g, '') + '</li>'; }).join('') +
+        '</ul></details></div>'
+      : '';
+  }
+
+  pintar(window.__COTIZACIONES__ || null);
+
+  // Abierto con doble clic (file://) no se puede refrescar: fetch local lo bloquea
+  // el navegador. Servido por HTTP sí, y ahí conviene releer por si entró un cron.
+  if (location.protocol === 'http:' || location.protocol === 'https:') {
+    setInterval(function () {
+      fetch('datos.json?t=' + Date.now(), { cache: 'no-store' })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (d) { if (d) pintar(d); })
+        .catch(function () { /* sin red: se queda con lo último pintado */ });
+    }, 5 * 60 * 1000);
+  }
+})();
+</script>
+</body>
+</html>

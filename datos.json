@@ -1,0 +1,86 @@
+{
+  "actualizado": "2026-09-14T14:58:12.073Z",
+  "mercado": {
+    "oro": {
+      "nombre": "Oro",
+      "unidad": "USD / onza troy",
+      "estado": "ok",
+      "precio": 4276.5,
+      "momento": "2026-09-14T14:58:08Z",
+      "fuente": "gold-api.com",
+      "variacion": null
+    },
+    "plata": {
+      "nombre": "Plata",
+      "unidad": "USD / onza troy",
+      "estado": "ok",
+      "precio": 62.997002,
+      "momento": "2026-09-14T14:58:07Z",
+      "fuente": "gold-api.com",
+      "variacion": null
+    },
+    "eurusd": {
+      "nombre": "EUR / USD",
+      "unidad": "dólares por euro",
+      "estado": "ok",
+      "precio": 1.1592,
+      "fuente": "BCE vía frankfurter.dev",
+      "momento": "2026-09-11",
+      "variacion": null
+    },
+    "usdjpy": {
+      "nombre": "USD / JPY",
+      "unidad": "yenes por dólar",
+      "estado": "ok",
+      "precio": 154.04,
+      "fuente": "BCE vía frankfurter.dev",
+      "momento": "2026-09-11",
+      "variacion": null
+    },
+    "dxy": {
+      "nombre": "Índice dólar (DXY)",
+      "unidad": "puntos — calculado",
+      "estado": "ok",
+      "precio": 99.168,
+      "fuente": "calculado sobre BCE vía frankfurter.dev",
+      "momento": "2026-09-11",
+      "calculado": true,
+      "variacion": null
+    }
+  },
+  "bcu": {
+    "estado": "ok",
+    "nombre": "DLS. USA BILLETE",
+    "compra": 40.2,
+    "venta": 40.2,
+    "promedio": 40.2,
+    "fecha": "2026-09-11",
+    "error": null
+  },
+  "bevsa": {
+    "estado": "apagado",
+    "compra": null,
+    "venta": null,
+    "promedio": null,
+    "fecha": null,
+    "error": null
+  },
+  "derivado": {
+    "baseDolar": "BCU",
+    "oroEnPesosPorOnza": 171915.3,
+    "oroEnPesosPorGramo": 5527.2
+  },
+  "incidencias": [],
+  "historico": [
+    {
+      "t": "2026-09-14T14:58:12.073Z",
+      "oro": 4276.5,
+      "plata": 62.997002,
+      "dxy": 99.168,
+      "eurusd": 1.1592,
+      "usdjpy": 154.04,
+      "bcu": 40.2,
+      "bevsa": null
+    }
+  ]
+}
