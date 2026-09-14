@@ -5,9 +5,23 @@ Oro, plata, dólar internacional y dólar uruguayo en una página. Abrir
 
 ## Para verlo
 
-Doble clic en `Cotizaciones.command`: baja los últimos datos y abre el tablero
-en el navegador. Si preferís a mano, abrir `index.html` directamente también
-funciona, pero muestra los datos que tengas bajados.
+Tres formas, de más a menos automática.
+
+**Como favorito del navegador (recomendado).** Doble clic en
+`Instalar servicio.command`. Instala un servicio de macOS que arranca solo al
+prender la Mac, sirve el tablero en `http://127.0.0.1:8787` y baja datos
+frescos cada media hora. Esa dirección se agrega a favoritos y funciona
+siempre. Para sacarlo: `Desinstalar servicio.command`.
+
+El servidor escucha únicamente en `127.0.0.1`: nada fuera de esta máquina lo
+alcanza. `http://127.0.0.1:8787/estado` dice si la última bajada de datos
+funcionó, y `servidor.log` guarda el registro.
+
+**De a una vez.** Doble clic en `Cotizaciones.command`: baja los últimos datos
+y abre el tablero, sin instalar nada.
+
+**Sin nada.** Abrir `index.html` directamente. Funciona, pero muestra los datos
+que tengas bajados de la última vez.
 
 ## Cómo funciona
 
@@ -91,6 +105,9 @@ gratuitas publica el valor previo.
 | `scripts/parseo.mjs` | Interpretación de números, del SOAP del BCU y cálculo del DXY. |
 | `scripts/probar-parseo.mjs` | Pruebas, sin red. |
 | `scripts/sondeo.mjs` | Diagnóstico: qué fuentes responden desde dónde. |
+| `servidor.mjs` | Servidor local, sin dependencias. Sirve la carpeta y baja datos cada media hora. |
+| `Instalar servicio.command` | Deja el tablero siempre disponible en 127.0.0.1:8787. |
+| `Desinstalar servicio.command` | Saca el servicio. No borra archivos. |
 
 ## Correr a mano
 
