@@ -16,7 +16,12 @@ export default async (req) => {
     const foto = await reunirDatos();
     const punto = puntoDe(foto);
 
-    const previa = (await store.get(CLAVE_SERIE, { type: 'json' })) ?? SEMILLA;
+    // La semilla se fusiona siempre, no solo cuando el almacén está vacío: la
+    // fusión deduplica por marca de tiempo, así que es idempotente, y si el
+    // almacén se pierde la serie histórica se repara sola en la corrida
+    // siguiente en vez de arrancar de cero.
+    const guardada = (await store.get(CLAVE_SERIE, { type: 'json' })) ?? [];
+    const previa = fusionarHistoricos(SEMILLA, guardada);
     // Una corrida donde no respondió nadie no merece un punto: dejaría un hueco
     // de nulls en el medio de la serie, que es peor que no tener el punto.
     const serie = tieneAlgo(punto)
