@@ -67,13 +67,23 @@
   .destacado .valor { color: var(--acento); }
   .oro .valor { color: var(--oro); }
 
-  .bevsa { display: grid; grid-template-columns: 1.2fr 1fr; gap: 14px; align-items: stretch; }
+  /* start, no stretch: si no, la tarjeta del dólar se estira hasta el alto del
+     gráfico y queda un hueco muerto adentro. */
+  .bevsa { display: grid; grid-template-columns: 1.2fr 1fr; gap: 14px; align-items: start; }
   .bevsa .puntas { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 6px; }
   .punta { background: rgba(255,255,255,.03); border-radius: 7px; padding: 9px 11px; }
   .punta span { display: block; font-size: 11px; color: var(--tenue); }
   .punta b { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
 
   #chispa-uyu { height: 110px; margin-top: 4px; }
+  .selector { display: flex; flex-wrap: wrap; gap: 5px; margin: 8px 0 2px; }
+  .selector button {
+    font: inherit; font-size: 11px; line-height: 1.4; cursor: pointer;
+    background: rgba(255,255,255,.04); color: var(--tenue);
+    border: 1px solid var(--borde); border-radius: 999px; padding: 3px 9px;
+  }
+  .selector button:hover { color: var(--texto); border-color: #3a4553; }
+  .selector button[aria-pressed="true"] { color: var(--fondo); font-weight: 600; }
   svg.chispa { width: 100%; height: 100%; display: block; }
 
   .aviso {
@@ -107,6 +117,7 @@
     <div class="tarjeta destacado" id="tarjeta-uyu"></div>
     <div class="tarjeta">
       <div class="nombre">Evolución</div>
+      <div class="selector" id="selector-serie"></div>
       <div id="chispa-uyu"></div>
       <div class="pie" id="pie-uyu"></div>
     </div>
@@ -142,6 +153,34 @@
 <script>
 (function () {
   var DECIMALES = { oro: 2, plata: 2, dxy: 2, eurusd: 4, usdjpy: 2, uyu: 3, brl: 4, ars: 2 };
+
+  // Series que puede mostrar el gráfico. "brecha" no está guardada en el
+  // histórico: se calcula al vuelo desde el oficial y el blue de cada punto.
+  var SERIES = [
+    { id: 'bcu',        nombre: 'Uruguay',      color: '#58a6ff', dec: 3, unidad: 'UYU por dólar' },
+    { id: 'brl',        nombre: 'Brasil',       color: '#3fb950', dec: 4, unidad: 'BRL por dólar' },
+    { id: 'arsOficial', nombre: 'Arg. oficial', color: '#a371f7', dec: 2, unidad: 'ARS por dólar' },
+    { id: 'arsBlue',    nombre: 'Arg. blue',    color: '#d29922', dec: 2, unidad: 'ARS por dólar' },
+    { id: 'brecha',     nombre: 'Brecha',       color: '#f85149', dec: 1, unidad: '% blue sobre oficial',
+      calcular: function (p) {
+        return (p.arsOficial && p.arsBlue) ? ((p.arsBlue / p.arsOficial) - 1) * 100 : null;
+      } },
+    { id: 'oro',        nombre: 'Oro',          color: '#d4af37', dec: 2, unidad: 'USD por onza' },
+    { id: 'plata',      nombre: 'Plata',        color: '#b8bcc4', dec: 2, unidad: 'USD por onza' },
+    { id: 'dxy',        nombre: 'DXY',          color: '#79c0ff', dec: 2, unidad: 'puntos' },
+    { id: 'eurusd',     nombre: 'EUR/USD',      color: '#56d364', dec: 4, unidad: 'USD por euro' },
+  ];
+
+  // La elección del usuario es una comodidad, no un dato: si el navegador no
+  // deja guardarla (ventana privada, cookies bloqueadas), se sigue sin ella.
+  function recordar(clave, valor) {
+    try { localStorage.setItem(clave, valor); } catch (e) { /* sin persistencia */ }
+  }
+  function recordado(clave, porDefecto) {
+    try { return localStorage.getItem(clave) || porDefecto; } catch (e) { return porDefecto; }
+  }
+
+  var serieElegida = recordado('cotizaciones.serie', 'bcu');
 
   function num(v, dec) {
     if (v === null || v === undefined || isNaN(v)) return null;
@@ -199,8 +238,57 @@
       'vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"/></svg>';
   }
 
-  function serie(historico, clave) {
-    return (historico || []).map(function (p) { return p[clave]; });
+  function valoresDe(historico, def) {
+    return (historico || []).map(function (p) {
+      var v = def.calcular ? def.calcular(p) : p[def.id];
+      return typeof v === 'number' && isFinite(v) ? v : null;
+    });
+  }
+
+  function definicion(id) {
+    for (var i = 0; i < SERIES.length; i++) if (SERIES[i].id === id) return SERIES[i];
+    return SERIES[0];
+  }
+
+  // Se dibuja solo lo que tiene datos: una serie vacía no merece un botón.
+  function pintarGrafico(hist) {
+    var conDatos = SERIES.filter(function (def) {
+      return valoresDe(hist, def).filter(function (v) { return v !== null; }).length > 0;
+    });
+    if (!conDatos.length) {
+      document.getElementById('selector-serie').innerHTML = '';
+      document.getElementById('chispa-uyu').innerHTML = '<div class="pie">Todavía no hay datos para graficar.</div>';
+      document.getElementById('pie-uyu').textContent = '';
+      return;
+    }
+
+    var existe = conDatos.some(function (d) { return d.id === serieElegida; });
+    if (!existe) serieElegida = conDatos[0].id;
+    var def = definicion(serieElegida);
+
+    document.getElementById('selector-serie').innerHTML = conDatos.map(function (d) {
+      var activo = d.id === serieElegida;
+      var estilo = activo ? ' style="background:' + d.color + ';border-color:' + d.color + '"' : '';
+      return '<button type="button" data-serie="' + d.id + '" aria-pressed="' + activo + '"' + estilo + '>' +
+        d.nombre + '</button>';
+    }).join('');
+
+    var valores = valoresDe(hist, def);
+    var presentes = valores.filter(function (v) { return v !== null; });
+    document.getElementById('chispa-uyu').innerHTML = chispa(valores, def.color);
+
+    var pie = document.getElementById('pie-uyu');
+    if (presentes.length) {
+      var primero = presentes[0], ultimo = presentes[presentes.length - 1];
+      var cambio = primero ? ((ultimo - primero) / primero) * 100 : null;
+      pie.innerHTML = def.unidad + ' · ' + presentes.length +
+        (presentes.length === 1 ? ' registro' : ' registros') +
+        (cambio !== null && presentes.length > 1
+          ? ' · ' + (cambio > 0 ? '+' : '') + num(cambio, 2) + '% en el período'
+          : '');
+    } else {
+      pie.textContent = 'sin registros todavía';
+    }
   }
 
   function tarjetaMercado(id, m) {
@@ -216,6 +304,18 @@
         (m.momento ? reloj(m.momento) : (m.estado === 'error' ? 'fuente caída' : '')) + '</div>' +
       '</div>';
   }
+
+  var ultimoHistorico = [];
+
+  // Un solo escuchador en el contenedor: los botones se redibujan en cada
+  // pintada, así que engancharlos uno por uno los perdería.
+  document.getElementById('selector-serie').addEventListener('click', function (e) {
+    var boton = e.target.closest('button[data-serie]');
+    if (!boton) return;
+    serieElegida = boton.getAttribute('data-serie');
+    recordar('cotizaciones.serie', serieElegida);
+    pintarGrafico(ultimoHistorico);
+  });
 
   function pintar(D) {
     if (!D) {
@@ -255,11 +355,8 @@
         ? ('cotización del ' + (reloj(b.fecha) || 'sin fecha') + ' · se publica por día hábil')
         : ('<span class="viejo">no se pudo leer: ' + (b.error || b.estado) + '</span>')) + '</div>';
 
-    var conDato = hist.filter(function (p) { return typeof p.bcu === 'number'; });
-    document.getElementById('chispa-uyu').innerHTML = chispa(serie(hist, 'bcu'), '#58a6ff');
-    document.getElementById('pie-uyu').textContent = conDato.length
-      ? conDato.length + (conDato.length === 1 ? ' registro' : ' registros') + ' · desde ' + reloj(conDato[0].t)
-      : 'sin registros todavía';
+    ultimoHistorico = hist;
+    pintarGrafico(hist);
 
     // Brasil y Argentina. El blue va marcado como informal a propósito: no
     // tiene fuente oficial y el número difiere entre agregadores.
