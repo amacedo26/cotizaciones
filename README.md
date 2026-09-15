@@ -114,6 +114,19 @@ Los controles de serie y período van **arriba** del gráfico, no adentro de su
 tarjeta: eligen qué se mira. El período por defecto es 24 horas porque a 144
 puntos por día la serie entera se vuelve ilegible en cualquier ancho de pantalla.
 
+**La línea se corta donde no hubo medición.** Dos casos distintos: cuando una
+fuente no dio valor en una corrida que sí ocurrió (el 2026-09-15 a las 06:10 el
+BCU no respondió y quedó un punto con `bcu: null`), y cuando faltan corridas
+enteras. El umbral para decidir que falta una corrida sale de la cadencia real
+de la serie —la mediana de los intervalos, por 2,5— y no de un número fijo: en
+una serie reducida los puntos están naturalmente más separados y un umbral fijo
+cortaría en todos lados.
+
+Una medición aislada entre dos huecos se dibuja como un punto, porque como
+segmento de línea sería invisible. El pie declara cuántos huecos hay: una línea
+cortada sin explicación desconcierta, con explicación informa. Y la tabla
+muestra «sin dato» en esas filas en vez de saltearlas.
+
 Los decimales del eje salen del paso entre marcas, no de la serie: con un paso de
 0,05 el tercer decimal sería siempre cero y además invitaría a leer «cuarenta mil»
 donde dice cuarenta.

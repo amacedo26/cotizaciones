@@ -277,11 +277,41 @@
   ];
   var rangoElegido = recordado('cotizaciones.rango', '24h');
 
+  // Los nulos NO se filtran: un punto sin valor es la prueba de que en ese
+  // momento no hubo medición, y el gráfico tiene que mostrar ese hueco en vez
+  // de unir la línea por encima como si nada hubiera pasado.
   function valoresDe(historico, def) {
     return (historico || []).map(function (p) {
       var v = def.calcular ? def.calcular(p) : p[def.id];
       return { t: Date.parse(p.t), v: (typeof v === 'number' && isFinite(v)) ? v : null };
-    }).filter(function (p) { return p.v !== null && isFinite(p.t); });
+    }).filter(function (p) { return isFinite(p.t); });
+  }
+
+  function conValor(puntos) {
+    return puntos.filter(function (p) { return p.v !== null; });
+  }
+
+  // La línea se corta en dos casos: cuando la fuente no dio valor, y cuando
+  // faltan mediciones enteras. El umbral sale de la cadencia real de la serie,
+  // no de un número fijo: en una serie reducida los puntos están naturalmente
+  // más separados y un umbral fijo cortaría en todos lados.
+  function tramosDe(puntos) {
+    var saltos = [];
+    for (var i = 1; i < puntos.length; i++) saltos.push(puntos[i].t - puntos[i - 1].t);
+    var ordenados = saltos.slice().sort(function (a, b) { return a - b; });
+    var cadencia = ordenados.length ? ordenados[Math.floor(ordenados.length / 2)] : 0;
+    var tope = cadencia ? cadencia * 2.5 : Infinity;
+
+    var tramos = [], actual = [];
+    for (var j = 0; j < puntos.length; j++) {
+      var p = puntos[j];
+      var previo = actual.length ? actual[actual.length - 1] : null;
+      var corta = p.v === null || (previo && (p.t - previo.t) > tope);
+      if (corta && actual.length) { tramos.push(actual); actual = []; }
+      if (p.v !== null) actual.push(p);
+    }
+    if (actual.length) tramos.push(actual);
+    return { tramos: tramos, tope: tope };
   }
 
   function definicion(id) {
@@ -336,12 +366,13 @@
     // El recorte por período lo hace /api/datos: pedirle solo el tramo que se
     // va a dibujar es lo que evita arrastrar la serie entera en cada refresco.
     var puntos = valoresDe(ultimoHistorico, def);
+    var medidos = conValor(puntos);
 
     caja.innerHTML = '';
     var pie = document.getElementById('pie-grafico');
 
-    if (puntos.length < 2) {
-      pie.textContent = puntos.length === 1
+    if (medidos.length < 2) {
+      pie.textContent = medidos.length === 1
         ? 'Un solo registro en este período: hacen falta dos para trazar una línea.'
         : 'Sin registros en este período.';
       dibujarTabla(puntos, def);
@@ -356,13 +387,13 @@
     var ancho1 = ancho - m.izquierda - m.derecha;
     var alto1 = alto - m.arriba - m.abajo;
 
-    var vs = puntos.map(function (p) { return p.v; });
+    var vs = medidos.map(function (p) { return p.v; });
     var vmin = Math.min.apply(null, vs);
     var vmax = Math.max.apply(null, vs);
     if (vmin === vmax) { vmin -= Math.abs(vmin || 1) * 0.001; vmax += Math.abs(vmax || 1) * 0.001; }
     var colchon = (vmax - vmin) * 0.12;
     var y0 = vmin - colchon, y1 = vmax + colchon;
-    var t0 = puntos[0].t, t1 = puntos[puntos.length - 1].t;
+    var t0 = medidos[0].t, t1 = medidos[medidos.length - 1].t;
 
     var px = function (t) { return m.izquierda + ((t - t0) / (t1 - t0 || 1)) * ancho1; };
     var py = function (v) { return m.arriba + (1 - (v - y0) / (y1 - y0)) * alto1; };
@@ -392,13 +423,23 @@
       svg.appendChild(et);
     }
 
-    var d = puntos.map(function (p, i) { return (i ? 'L' : 'M') + px(p.t).toFixed(1) + ' ' + py(p.v).toFixed(1); }).join(' ');
-    svg.appendChild(nodo('path', { d: d, fill: 'none', stroke: def.color, 'stroke-width': 2,
-                                   'stroke-linejoin': 'round', 'stroke-linecap': 'round' }));
+    var corte = tramosDe(puntos);
+    corte.tramos.forEach(function (tramo) {
+      if (tramo.length === 1) {
+        // una medición aislada entre huecos: sin un punto propio sería invisible
+        svg.appendChild(nodo('circle', { cx: px(tramo[0].t), cy: py(tramo[0].v), r: 3, fill: def.color }));
+        return;
+      }
+      var d = tramo.map(function (p, i) {
+        return (i ? 'L' : 'M') + px(p.t).toFixed(1) + ' ' + py(p.v).toFixed(1);
+      }).join(' ');
+      svg.appendChild(nodo('path', { d: d, fill: 'none', stroke: def.color, 'stroke-width': 2,
+                                     'stroke-linejoin': 'round', 'stroke-linecap': 'round' }));
+    });
 
     // el último valor va rotulado: el eje no tiene por qué cargar con el dato
     // que el lector busca primero
-    var ult = puntos[puntos.length - 1];
+    var ult = medidos[medidos.length - 1];
     svg.appendChild(nodo('circle', { cx: px(ult.t), cy: py(ult.v), r: 4.5, fill: def.color,
                                      stroke: 'var(--panel)', 'stroke-width': 2 }));
     var rotulo = nodo('text', { class: 'eje-texto', x: px(ult.t) + 10, y: py(ult.v) + 4,
@@ -426,11 +467,11 @@
       var caj = svg.getBoundingClientRect();
       var xReal = ((clienteX - caj.left) / caj.width) * ancho;
       var mejor = 0, dist = Infinity;
-      for (var i = 0; i < puntos.length; i++) {
-        var dd = Math.abs(px(puntos[i].t) - xReal);
+      for (var i = 0; i < medidos.length; i++) {
+        var dd = Math.abs(px(medidos[i].t) - xReal);
         if (dd < dist) { dist = dd; mejor = i; }
       }
-      var p = puntos[mejor];
+      var p = medidos[mejor];
       var x = px(p.t), y = py(p.v);
       cruz.setAttribute('x1', x); cruz.setAttribute('x2', x); cruz.setAttribute('opacity', 1);
       marca.setAttribute('cx', x); marca.setAttribute('cy', y); marca.setAttribute('opacity', 1);
@@ -465,15 +506,20 @@
     zona.addEventListener('pointermove', function (e) { mostrar(e.clientX); });
     zona.addEventListener('pointerleave', esconder);
 
-    var cambio = puntos[0].v ? ((ult.v - puntos[0].v) / puntos[0].v) * 100 : null;
+    var cambio = medidos[0].v ? ((ult.v - medidos[0].v) / medidos[0].v) * 100 : null;
     var conteo = (ultimaFoto && ultimaFoto.puntos) || {};
-    pie.textContent = def.nombre + ' · ' + def.unidad + ' · ' + puntos.length +
-      (puntos.length === 1 ? ' registro' : ' registros') +
+    var huecos = corte.tramos.length - 1;
+    pie.textContent = def.nombre + ' · ' + def.unidad + ' · ' + medidos.length +
+      (medidos.length === 1 ? ' registro' : ' registros') +
       ' · desde ' + reloj(new Date(t0).toISOString()) +
       (cambio !== null ? ' · ' + (cambio > 0 ? '+' : '') + num(cambio, 2) + '% en el período' : '') +
       // Un gráfico que no avisa que muestra una muestra miente por omisión.
       (ultimaFoto && ultimaFoto.reducida
         ? ' · muestra de ' + conteo.enRango + ' mediciones'
+        : '') +
+      // Una línea cortada sin explicación desconcierta; con ella, informa.
+      (huecos > 0
+        ? ' · ' + huecos + (huecos === 1 ? ' hueco sin medición' : ' huecos sin medición')
         : '');
 
     dibujarTabla(puntos, def);
@@ -493,7 +539,7 @@
     muestra.forEach(function (p) {
       var f = tabla.insertRow();
       f.insertCell().textContent = reloj(new Date(p.t).toISOString());
-      f.insertCell().textContent = num(p.v, def.dec);
+      f.insertCell().textContent = p.v === null ? 'sin dato' : num(p.v, def.dec);
     });
     var resumen = document.querySelector('#tabla-valores summary');
     resumen.textContent = puntos.length > TOPE_TABLA
