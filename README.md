@@ -78,6 +78,26 @@ autenticarse, e insistir solo arriesga que marquen la cuenta.
 
 **El BCU no es BEVSA**: publica la cotización oficial, no la interbancaria.
 
+## El gráfico
+
+Línea con ejes rotulados, grilla, etiqueta en el último valor, cruz de lectura al
+pasar el mouse y una tabla con los valores. La tabla no es un extra: ningún valor
+puede quedar accesible solo por hover.
+
+Los controles de serie y período van **arriba** del gráfico, no adentro de su
+tarjeta: eligen qué se mira. El período por defecto es 24 horas porque a 144
+puntos por día la serie entera se vuelve ilegible en cualquier ancho de pantalla.
+
+Los decimales del eje salen del paso entre marcas, no de la serie: con un paso de
+0,05 el tercer decimal sería siempre cero y además invitaría a leer «cuarenta mil»
+donde dice cuarenta.
+
+Cada serie tiene su color, pero **se muestra una sola a la vez** y el botón activo
+lleva el nombre escrito, así que la identidad nunca depende del color. Por eso la
+paleta no necesita separación para daltonismo entre colores adyacentes: nunca hay
+dos líneas juntas. Lo que sí se corrigió es que la plata era gris — en un gráfico
+el gris es el color de lo secundario, no el de un dato.
+
 ## Qué está calculado y qué viene de una fuente
 
 Tres números del tablero no los publica nadie; los calcula el código, y están

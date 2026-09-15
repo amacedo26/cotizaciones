@@ -80,8 +80,28 @@
   .punta span { display: block; font-size: 11px; color: var(--tenue); }
   .punta b { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
 
-  #chispa-uyu { height: 110px; margin-top: 4px; }
-  .selector { display: flex; flex-wrap: wrap; gap: 5px; margin: 8px 0 2px; }
+  .lamina { padding: 10px 14px 6px; position: relative; }
+  #grafico { position: relative; width: 100%; }
+  #grafico svg { display: block; width: 100%; }
+  /* Grilla y ejes: un paso por encima del fondo, línea sólida, nunca punteada. */
+  .grilla { stroke: #222932; stroke-width: 1; }
+  .eje-texto { fill: var(--tenue); font-size: 11px; font-variant-numeric: tabular-nums; }
+  .cruz { stroke: #3d4653; stroke-width: 1; }
+  .globo {
+    position: absolute; pointer-events: none; z-index: 3; opacity: 0;
+    background: #11161d; border: 1px solid var(--borde); border-radius: 7px;
+    padding: 7px 10px; font-size: 12px; white-space: nowrap;
+    box-shadow: 0 6px 18px rgba(0,0,0,.45); transition: opacity .1s;
+  }
+  .globo .valor-globo { font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .globo .cuando-globo { color: var(--tenue); font-size: 11px; margin-top: 2px; }
+  .globo .llave { display: inline-block; width: 14px; height: 2px; vertical-align: middle;
+                  margin-right: 6px; border-radius: 1px; }
+
+  .controles { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; margin-bottom: 10px; }
+  /* Sin esto, los dos grupos se leen como una sola fila de doce botones. */
+  .controles .separador { width: 1px; align-self: stretch; background: var(--borde); }
+  .selector { display: flex; flex-wrap: wrap; gap: 5px; }
   .selector button {
     font: inherit; font-size: 11px; line-height: 1.4; cursor: pointer;
     background: rgba(255,255,255,.04); color: var(--tenue);
@@ -89,7 +109,17 @@
   }
   .selector button:hover { color: var(--texto); border-color: #3a4553; }
   .selector button[aria-pressed="true"] { color: var(--fondo); font-weight: 600; }
-  svg.chispa { width: 100%; height: 100%; display: block; }
+  #tabla-valores { margin-top: 14px; font-size: 13px; color: var(--tenue); }
+  #tabla-valores summary { cursor: pointer; }
+  .envoltorio-tabla { max-height: 340px; overflow: auto; margin-top: 10px;
+                      border: 1px solid var(--borde); border-radius: 8px; }
+  #tabla-serie { width: 100%; border-collapse: collapse; font-size: 12px; }
+  #tabla-serie th, #tabla-serie td { padding: 5px 12px; text-align: right;
+                                     border-bottom: 1px solid var(--borde); }
+  #tabla-serie th:first-child, #tabla-serie td:first-child { text-align: left; }
+  #tabla-serie th { position: sticky; top: 0; background: var(--panel);
+                    color: var(--tenue); font-weight: 600; }
+  #tabla-serie td { color: var(--texto); font-variant-numeric: tabular-nums; }
 
   .aviso {
     border: 1px solid #3d2f12; background: #1d1708; color: #e3b341;
@@ -118,19 +148,29 @@
   </header>
 
   <h2>Región</h2>
-  <div class="bevsa">
+  <div class="rejilla">
     <div class="tarjeta destacado" id="tarjeta-uyu"></div>
-    <div class="tarjeta">
-      <div class="nombre">Evolución</div>
-      <div class="selector" id="selector-serie"></div>
-      <div id="chispa-uyu"></div>
-      <div class="pie" id="pie-uyu"></div>
-    </div>
   </div>
   <div class="rejilla" id="rejilla-region"></div>
   <div class="rejilla" id="rejilla-bevsa"></div>
   <div id="aviso-argentina"></div>
   <p class="nota" id="nota-region"></p>
+
+  <h2>Evolución</h2>
+  <!-- Los controles van arriba del gráfico, no adentro: eligen qué se mira. -->
+  <div class="controles">
+    <div class="selector" id="selector-serie" role="group" aria-label="Serie"></div>
+    <div class="separador" aria-hidden="true"></div>
+    <div class="selector" id="selector-rango" role="group" aria-label="Período"></div>
+  </div>
+  <div class="tarjeta lamina">
+    <div id="grafico"></div>
+    <div class="pie" id="pie-grafico"></div>
+  </div>
+  <details id="tabla-valores">
+    <summary>Ver los valores en una tabla</summary>
+    <div class="envoltorio-tabla"><table id="tabla-serie"></table></div>
+  </details>
 
   <h2>Metales y dólar internacional</h2>
   <div class="rejilla" id="rejilla-mercado"></div>
@@ -168,7 +208,7 @@
         return (p.arsOficial && p.arsBlue) ? ((p.arsBlue / p.arsOficial) - 1) * 100 : null;
       } },
     { id: 'oro',        nombre: 'Oro',          color: '#d4af37', dec: 2, unidad: 'USD por onza' },
-    { id: 'plata',      nombre: 'Plata',        color: '#b8bcc4', dec: 2, unidad: 'USD por onza' },
+    { id: 'plata',      nombre: 'Plata',        color: '#56d4dd', dec: 2, unidad: 'USD por onza' },
     { id: 'dxy',        nombre: 'DXY',          color: '#79c0ff', dec: 2, unidad: 'puntos' },
     { id: 'eurusd',     nombre: 'EUR/USD',      color: '#56d364', dec: 4, unidad: 'USD por euro' },
   ];
@@ -224,27 +264,23 @@
     return '<span class="delta ' + clase + '">' + signo + num(v, 2) + '%</span>';
   }
 
-  // Sparkline: se dibuja a mano para no depender de ninguna librería externa.
-  function chispa(valores, color) {
-    var puntos = valores.filter(function (v) { return typeof v === 'number' && isFinite(v); });
-    if (puntos.length < 2) return '<div class="pie">Todavía no hay serie suficiente para graficar.</div>';
-    var min = Math.min.apply(null, puntos), max = Math.max.apply(null, puntos);
-    var rango = max - min || 1, ancho = 100, alto = 100;
-    var d = puntos.map(function (v, i) {
-      var x = (i / (puntos.length - 1)) * ancho;
-      var y = alto - ((v - min) / rango) * (alto - 12) - 6;
-      return (i ? 'L' : 'M') + x.toFixed(2) + ' ' + y.toFixed(2);
-    }).join(' ');
-    return '<svg class="chispa" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">' +
-      '<path d="' + d + '" fill="none" stroke="' + color + '" stroke-width="1.6" ' +
-      'vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"/></svg>';
-  }
+  // --- el gráfico ------------------------------------------------------------
+  // Se dibuja a mano, sin librerías. Un sparkline muestra la forma pero no deja
+  // leer un valor: acá van ejes con números, grilla, etiqueta en el extremo,
+  // cruz de lectura al pasar el mouse y una tabla con todos los valores.
+
+  var RANGOS = [
+    { id: '24h',  nombre: '24 horas', ms: 24 * 3600 * 1000 },
+    { id: '7d',   nombre: '7 días',   ms: 7 * 24 * 3600 * 1000 },
+    { id: 'todo', nombre: 'Todo',     ms: null },
+  ];
+  var rangoElegido = recordado('cotizaciones.rango', '24h');
 
   function valoresDe(historico, def) {
     return (historico || []).map(function (p) {
       var v = def.calcular ? def.calcular(p) : p[def.id];
-      return typeof v === 'number' && isFinite(v) ? v : null;
-    });
+      return { t: Date.parse(p.t), v: (typeof v === 'number' && isFinite(v)) ? v : null };
+    }).filter(function (p) { return p.v !== null && isFinite(p.t); });
   }
 
   function definicion(id) {
@@ -252,46 +288,238 @@
     return SERIES[0];
   }
 
-  // Se dibuja solo lo que tiene datos: una serie vacía no merece un botón.
-  function pintarGrafico(hist) {
-    var conDatos = SERIES.filter(function (def) {
-      return valoresDe(hist, def).filter(function (v) { return v !== null; }).length > 0;
-    });
-    if (!conDatos.length) {
-      document.getElementById('selector-serie').innerHTML = '';
-      document.getElementById('chispa-uyu').innerHTML = '<div class="pie">Todavía no hay datos para graficar.</div>';
-      document.getElementById('pie-uyu').textContent = '';
+  function rango(id) {
+    for (var i = 0; i < RANGOS.length; i++) if (RANGOS[i].id === id) return RANGOS[i];
+    return RANGOS[0];
+  }
+
+  // Marcas redondas: nadie lee un eje que dice 4287,3194.
+  function ticksLindos(min, max, cuantas) {
+    if (!(max > min)) {
+      var base = min || 0;
+      return [base];
+    }
+    var crudo = (max - min) / cuantas;
+    var mag = Math.pow(10, Math.floor(Math.log10(crudo)));
+    var norm = crudo / mag;
+    var paso = (norm >= 7.5 ? 10 : norm >= 3 ? 5 : norm >= 1.5 ? 2 : 1) * mag;
+    var marcas = [];
+    for (var v = Math.ceil(min / paso) * paso; v <= max + paso * 1e-6; v += paso) {
+      marcas.push(+v.toPrecision(12));
+    }
+    return marcas;
+  }
+
+  function horaCorta(ms, abarcaDias) {
+    var d = new Date(ms);
+    try {
+      return d.toLocaleString('es-UY', abarcaDias
+        ? { timeZone: 'America/Montevideo', day: '2-digit', month: '2-digit' }
+        : { timeZone: 'America/Montevideo', hour: '2-digit', minute: '2-digit' });
+    } catch (e) { return ''; }
+  }
+
+  var SVG = 'http://www.w3.org/2000/svg';
+  function nodo(nombre, atributos) {
+    var e = document.createElementNS(SVG, nombre);
+    for (var k in atributos) e.setAttribute(k, atributos[k]);
+    return e;
+  }
+
+  var ultimoHistorico = [];
+
+  function dibujarGrafico() {
+    var caja = document.getElementById('grafico');
+    var def = definicion(serieElegida);
+    var r = rango(rangoElegido);
+
+    var todos = valoresDe(ultimoHistorico, def);
+    var desde = r.ms ? Date.now() - r.ms : -Infinity;
+    var puntos = todos.filter(function (p) { return p.t >= desde; });
+
+    caja.innerHTML = '';
+    var pie = document.getElementById('pie-grafico');
+
+    if (puntos.length < 2) {
+      pie.textContent = puntos.length === 1
+        ? 'Un solo registro en este período: hacen falta dos para trazar una línea.'
+        : 'Sin registros en este período.';
+      dibujarTabla(puntos, def);
       return;
     }
 
-    var existe = conDatos.some(function (d) { return d.id === serieElegida; });
-    if (!existe) serieElegida = conDatos[0].id;
-    var def = definicion(serieElegida);
+    var ancho = Math.max(caja.clientWidth || 640, 320);
+    var alto = 260;
+    // El alto incluye la banda del eje horizontal: si no, las etiquetas
+    // quedarían fuera de la tarjeta y aparecería un scroll interno.
+    var m = { arriba: 14, derecha: 74, abajo: 30, izquierda: 62 };
+    var ancho1 = ancho - m.izquierda - m.derecha;
+    var alto1 = alto - m.arriba - m.abajo;
 
-    document.getElementById('selector-serie').innerHTML = conDatos.map(function (d) {
-      var activo = d.id === serieElegida;
-      var estilo = activo ? ' style="background:' + d.color + ';border-color:' + d.color + '"' : '';
-      return '<button type="button" data-serie="' + d.id + '" aria-pressed="' + activo + '"' + estilo + '>' +
-        d.nombre + '</button>';
-    }).join('');
+    var vs = puntos.map(function (p) { return p.v; });
+    var vmin = Math.min.apply(null, vs);
+    var vmax = Math.max.apply(null, vs);
+    if (vmin === vmax) { vmin -= Math.abs(vmin || 1) * 0.001; vmax += Math.abs(vmax || 1) * 0.001; }
+    var colchon = (vmax - vmin) * 0.12;
+    var y0 = vmin - colchon, y1 = vmax + colchon;
+    var t0 = puntos[0].t, t1 = puntos[puntos.length - 1].t;
 
-    var valores = valoresDe(hist, def);
-    var presentes = valores.filter(function (v) { return v !== null; });
-    document.getElementById('chispa-uyu').innerHTML = chispa(valores, def.color);
+    var px = function (t) { return m.izquierda + ((t - t0) / (t1 - t0 || 1)) * ancho1; };
+    var py = function (v) { return m.arriba + (1 - (v - y0) / (y1 - y0)) * alto1; };
 
-    var pie = document.getElementById('pie-uyu');
-    if (presentes.length) {
-      var primero = presentes[0], ultimo = presentes[presentes.length - 1];
-      var cambio = primero ? ((ultimo - primero) / primero) * 100 : null;
-      pie.innerHTML = def.unidad + ' · ' + presentes.length +
-        (presentes.length === 1 ? ' registro' : ' registros') +
-        (cambio !== null && presentes.length > 1
-          ? ' · ' + (cambio > 0 ? '+' : '') + num(cambio, 2) + '% en el período'
-          : '');
-    } else {
-      pie.textContent = 'sin registros todavía';
+    var svg = nodo('svg', { viewBox: '0 0 ' + ancho + ' ' + alto, height: alto,
+                            role: 'img', 'aria-label': def.nombre + ', ' + def.unidad });
+
+    // grilla y eje vertical
+    var marcas = ticksLindos(vmin, vmax, 4);
+    var paso = marcas.length > 1 ? Math.abs(marcas[1] - marcas[0]) : 1;
+    var decEje = Math.max(0, Math.min(6, Math.ceil(-Math.log10(paso))));
+    marcas.forEach(function (v) {
+      var y = py(v);
+      svg.appendChild(nodo('line', { class: 'grilla', x1: m.izquierda, x2: ancho - m.derecha, y1: y, y2: y }));
+      var etiqueta = nodo('text', { class: 'eje-texto', x: m.izquierda - 9, y: y + 4, 'text-anchor': 'end' });
+      etiqueta.textContent = num(v, decEje);
+      svg.appendChild(etiqueta);
+    });
+
+    // eje horizontal: cuatro marcas, formato según si el período abarca días
+    var abarcaDias = (t1 - t0) > 36 * 3600 * 1000;
+    for (var i = 0; i <= 3; i++) {
+      var t = t0 + ((t1 - t0) * i) / 3;
+      var et = nodo('text', { class: 'eje-texto', x: px(t), y: alto - 10,
+                              'text-anchor': i === 0 ? 'start' : i === 3 ? 'end' : 'middle' });
+      et.textContent = horaCorta(t, abarcaDias);
+      svg.appendChild(et);
     }
+
+    var d = puntos.map(function (p, i) { return (i ? 'L' : 'M') + px(p.t).toFixed(1) + ' ' + py(p.v).toFixed(1); }).join(' ');
+    svg.appendChild(nodo('path', { d: d, fill: 'none', stroke: def.color, 'stroke-width': 2,
+                                   'stroke-linejoin': 'round', 'stroke-linecap': 'round' }));
+
+    // el último valor va rotulado: el eje no tiene por qué cargar con el dato
+    // que el lector busca primero
+    var ult = puntos[puntos.length - 1];
+    svg.appendChild(nodo('circle', { cx: px(ult.t), cy: py(ult.v), r: 4.5, fill: def.color,
+                                     stroke: 'var(--panel)', 'stroke-width': 2 }));
+    var rotulo = nodo('text', { class: 'eje-texto', x: px(ult.t) + 10, y: py(ult.v) + 4,
+                                fill: 'var(--texto)', 'font-weight': '600' });
+    rotulo.textContent = num(ult.v, def.dec);
+    svg.appendChild(rotulo);
+
+    var cruz = nodo('line', { class: 'cruz', y1: m.arriba, y2: alto - m.abajo, opacity: 0 });
+    var marca = nodo('circle', { r: 4.5, fill: def.color, stroke: 'var(--panel)', 'stroke-width': 2, opacity: 0 });
+    svg.appendChild(cruz);
+    svg.appendChild(marca);
+    caja.appendChild(svg);
+
+    var globo = document.createElement('div');
+    globo.className = 'globo';
+    caja.appendChild(globo);
+
+    // El área sensible es toda la zona del gráfico, no la línea: nadie apunta a
+    // dos píxeles. La cruz se pega al punto más cercano en el eje del tiempo.
+    var zona = nodo('rect', { x: m.izquierda, y: m.arriba, width: ancho1, height: alto1,
+                              fill: 'transparent', style: 'cursor:crosshair' });
+    svg.appendChild(zona);
+
+    function mostrar(clienteX) {
+      var caj = svg.getBoundingClientRect();
+      var xReal = ((clienteX - caj.left) / caj.width) * ancho;
+      var mejor = 0, dist = Infinity;
+      for (var i = 0; i < puntos.length; i++) {
+        var dd = Math.abs(px(puntos[i].t) - xReal);
+        if (dd < dist) { dist = dd; mejor = i; }
+      }
+      var p = puntos[mejor];
+      var x = px(p.t), y = py(p.v);
+      cruz.setAttribute('x1', x); cruz.setAttribute('x2', x); cruz.setAttribute('opacity', 1);
+      marca.setAttribute('cx', x); marca.setAttribute('cy', y); marca.setAttribute('opacity', 1);
+
+      globo.innerHTML = '';
+      var fila = document.createElement('div');
+      var llave = document.createElement('span');
+      llave.className = 'llave'; llave.style.background = def.color;
+      var valor = document.createElement('span');
+      valor.className = 'valor-globo';
+      valor.textContent = num(p.v, def.dec);          // textContent: nunca concatenar
+      fila.appendChild(llave); fila.appendChild(valor);
+      var cuando = document.createElement('div');
+      cuando.className = 'cuando-globo';
+      cuando.textContent = reloj(new Date(p.t).toISOString());
+      globo.appendChild(fila); globo.appendChild(cuando);
+
+      var escala = caj.width / ancho;
+      var izq = x * escala + 14;
+      if (izq > caj.width - 150) izq = x * escala - 150;
+      globo.style.left = Math.max(4, izq) + 'px';
+      globo.style.top = Math.max(4, y * escala - 46) + 'px';
+      globo.style.opacity = 1;
+    }
+
+    function esconder() {
+      cruz.setAttribute('opacity', 0);
+      marca.setAttribute('opacity', 0);
+      globo.style.opacity = 0;
+    }
+
+    zona.addEventListener('pointermove', function (e) { mostrar(e.clientX); });
+    zona.addEventListener('pointerleave', esconder);
+
+    var cambio = puntos[0].v ? ((ult.v - puntos[0].v) / puntos[0].v) * 100 : null;
+    pie.textContent = def.nombre + ' · ' + def.unidad + ' · ' + puntos.length +
+      (puntos.length === 1 ? ' registro' : ' registros') +
+      ' · desde ' + reloj(new Date(t0).toISOString()) +
+      (cambio !== null ? ' · ' + (cambio > 0 ? '+' : '') + num(cambio, 2) + '% en el período' : '');
+
+    dibujarTabla(puntos, def);
   }
+
+  // La tabla es el gemelo accesible del gráfico: ningún valor queda detrás de
+  // un hover. Se limita para no volcar miles de filas en el documento.
+  var TOPE_TABLA = 300;
+  function dibujarTabla(puntos, def) {
+    var tabla = document.getElementById('tabla-serie');
+    tabla.innerHTML = '';
+    var enc = tabla.insertRow();
+    ['Momento', def.unidad].forEach(function (t) {
+      var th = document.createElement('th'); th.textContent = t; enc.appendChild(th);
+    });
+    var muestra = puntos.slice(-TOPE_TABLA).reverse();
+    muestra.forEach(function (p) {
+      var f = tabla.insertRow();
+      f.insertCell().textContent = reloj(new Date(p.t).toISOString());
+      f.insertCell().textContent = num(p.v, def.dec);
+    });
+    var resumen = document.querySelector('#tabla-valores summary');
+    resumen.textContent = puntos.length > TOPE_TABLA
+      ? 'Ver los valores en una tabla (los ' + TOPE_TABLA + ' más recientes de ' + puntos.length + ')'
+      : 'Ver los valores en una tabla (' + puntos.length + ')';
+  }
+
+  function pintarBotones(id, opciones, elegido, color) {
+    document.getElementById(id).innerHTML = opciones.map(function (o) {
+      var activo = o.id === elegido;
+      var tono = color ? (color(o) || 'var(--acento)') : 'var(--acento)';
+      var estilo = activo ? ' style="background:' + tono + ';border-color:' + tono + '"' : '';
+      return '<button type="button" data-id="' + o.id + '" aria-pressed="' + activo + '"' + estilo + '>' +
+        o.nombre + '</button>';
+    }).join('');
+  }
+
+  function pintarControles() {
+    var conDatos = SERIES.filter(function (def) { return valoresDe(ultimoHistorico, def).length > 0; });
+    if (!conDatos.length) conDatos = [SERIES[0]];
+    if (!conDatos.some(function (d) { return d.id === serieElegida; })) serieElegida = conDatos[0].id;
+    pintarBotones('selector-serie', conDatos, serieElegida, function (o) { return o.color; });
+    pintarBotones('selector-rango', RANGOS, rangoElegido, null);
+  }
+
+  function pintarGrafico(hist) {
+    ultimoHistorico = hist || [];
+    pintarControles();
+    dibujarGrafico();
+  }
+
 
   function tarjetaMercado(id, m) {
     var dec = DECIMALES[id] || 2;
@@ -307,16 +535,30 @@
       '</div>';
   }
 
-  var ultimoHistorico = [];
-
-  // Un solo escuchador en el contenedor: los botones se redibujan en cada
+  // Un solo escuchador por contenedor: los botones se redibujan en cada
   // pintada, así que engancharlos uno por uno los perdería.
-  document.getElementById('selector-serie').addEventListener('click', function (e) {
-    var boton = e.target.closest('button[data-serie]');
-    if (!boton) return;
-    serieElegida = boton.getAttribute('data-serie');
-    recordar('cotizaciones.serie', serieElegida);
-    pintarGrafico(ultimoHistorico);
+  function engancharSelector(id, alElegir) {
+    document.getElementById(id).addEventListener('click', function (e) {
+      var boton = e.target.closest('button[data-id]');
+      if (!boton) return;
+      alElegir(boton.getAttribute('data-id'));
+      pintarControles();
+      dibujarGrafico();
+    });
+  }
+  engancharSelector('selector-serie', function (v) {
+    serieElegida = v; recordar('cotizaciones.serie', v);
+  });
+  engancharSelector('selector-rango', function (v) {
+    rangoElegido = v; recordar('cotizaciones.rango', v);
+  });
+
+  // El gráfico se dibuja en píxeles reales, así que hay que rehacerlo si cambia
+  // el ancho disponible.
+  var esperandoResize;
+  window.addEventListener('resize', function () {
+    clearTimeout(esperandoResize);
+    esperandoResize = setTimeout(dibujarGrafico, 150);
   });
 
   function pintar(D) {
