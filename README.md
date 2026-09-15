@@ -38,7 +38,8 @@ nunca en el repositorio.
 | Ruta | Qué devuelve |
 |---|---|
 | `/` | El tablero |
-| `/api/datos` | La última foto más la serie histórica |
+| `/api/datos?rango=24h` | La última foto más el tramo de serie pedido. Rangos: `24h` (por defecto), `7d`, `30d`, `todo` |
+| `/api/serie` | La serie completa, sin recortar ni reducir |
 | `/api/estado` | Diagnóstico: cómo salió la última corrida y hace cuánto |
 
 **Si el tablero parece congelado, mirar `/api/estado` primero.** Dice si la
@@ -77,6 +78,31 @@ factor y el sitio está detrás de Cloudflare: un proceso desatendido no puede
 autenticarse, e insistir solo arriesga que marquen la cuenta.
 
 **El BCU no es BEVSA**: publica la cotización oficial, no la interbancaria.
+
+## Por qué /api/datos no devuelve la serie entera
+
+La serie crece 144 puntos por día y la página la vuelve a pedir cada dos minutos.
+Devolverla completa haría que el peso creciera sin techo, para dibujar puntos que
+no entran en la pantalla: un gráfico de mil y pico de píxeles no puede mostrar
+más de un punto por píxel.
+
+Así que se recorta al período pedido y se reduce a **1.000 puntos como máximo**.
+Medido con una serie de 90 días (12.960 puntos):
+
+| pedido | peso | puntos |
+|---|---|---|
+| `/api/datos` (24 h, el que usa la página al abrir) | 27 KB | 144 |
+| `/api/datos?rango=todo` | 176 KB | 1.000 |
+| `/api/serie` | 2.253 KB | 12.960 |
+
+Lo que importa no es el número sino que **está acotado**: a los dos años de
+histórico, `?rango=todo` va a seguir pesando lo mismo.
+
+Al reducir se conserva el **último punto de cada tramo, nunca un promedio**:
+promediar inventaría valores que nunca se midieron, y en precios eso no se hace.
+Los extremos de la serie se preservan siempre. Cuando la respuesta viene
+reducida el tablero lo dice al pie del gráfico, porque un gráfico que no avisa
+que muestra una muestra miente por omisión.
 
 ## El gráfico
 

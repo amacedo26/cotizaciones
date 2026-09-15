@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { aNumero, interpretarBevsa, interpretarBcu, interpretarSwissquote, interpretarDolarApi,
          interpretarBluelytics, calcularBrecha, calcularDxy, fusionarHistoricos, podar,
-         contrastarArgentina } from '../lib/parseo.mjs';
+         contrastarArgentina, recortar, reducir } from '../lib/parseo.mjs';
 
 test('aNumero entiende los formatos de número que puede mandar el endpoint', () => {
   assert.equal(aNumero(41.25), 41.25);
@@ -278,4 +278,46 @@ test('contraste: sin segunda fuente no inventa un veredicto', () => {
   const r = contrastarArgentina(interpretarDolarApi(DOLARAPI), null);
   assert.equal(r.estado, 'sin contraste');
   assert.equal(r.discrepa, undefined);
+});
+
+const serieLarga = Array.from({ length: 13000 }, (_, i) => ({
+  t: new Date(Date.parse('2026-06-17T00:00:00.000Z') + i * 10 * 60 * 1000).toISOString(),
+  oro: 4000 + i * 0.01,
+}));
+
+test('recortar: deja solo lo que cae dentro del período', () => {
+  const ahora = Date.parse('2026-09-15T18:00:00.000Z');
+  const serie = [
+    { t: '2026-09-01T12:00:00.000Z' },   // hace 14 días
+    { t: '2026-09-14T12:00:00.000Z' },   // hace 30 horas
+    { t: '2026-09-15T12:00:00.000Z' },   // hace 6 horas
+  ];
+  assert.equal(recortar(serie, '24h', ahora).length, 1);
+  assert.equal(recortar(serie, '7d', ahora).length, 2);
+  assert.equal(recortar(serie, 'todo', ahora).length, 3);
+});
+
+test('reducir: respeta el tope y conserva los extremos', () => {
+  const r = reducir(serieLarga, 1000);
+  assert.ok(r.length <= 1002, `devolvió ${r.length}`);
+  assert.equal(r[0].t, serieLarga[0].t);                          // el primero real
+  assert.equal(r[r.length - 1].t, serieLarga[serieLarga.length - 1].t); // y el último
+});
+
+test('reducir: no toca una serie que ya entra en el tope', () => {
+  const corta = serieLarga.slice(0, 500);
+  assert.equal(reducir(corta, 1000), corta);
+});
+
+test('reducir: los puntos son medidos, nunca promediados', () => {
+  const r = reducir(serieLarga, 100);
+  const reales = new Set(serieLarga.map((p) => p.oro));
+  for (const p of r) assert.ok(reales.has(p.oro), `${p.oro} no existe en la serie original`);
+});
+
+test('reducir: la serie devuelta mantiene el orden temporal', () => {
+  const r = reducir(serieLarga, 300);
+  for (let i = 1; i < r.length; i++) {
+    assert.ok(Date.parse(r[i].t) > Date.parse(r[i - 1].t), `desorden en ${i}`);
+  }
 });

@@ -83,6 +83,7 @@
   .lamina { padding: 10px 14px 6px; position: relative; }
   #grafico { position: relative; width: 100%; }
   #grafico svg { display: block; width: 100%; }
+  #grafico.cargando { opacity: .45; transition: opacity .15s; }
   /* Grilla y ejes: un paso por encima del fondo, línea sólida, nunca punteada. */
   .grilla { stroke: #222932; stroke-width: 1; }
   .eje-texto { fill: var(--tenue); font-size: 11px; font-variant-numeric: tabular-nums; }
@@ -331,11 +332,10 @@
   function dibujarGrafico() {
     var caja = document.getElementById('grafico');
     var def = definicion(serieElegida);
-    var r = rango(rangoElegido);
 
-    var todos = valoresDe(ultimoHistorico, def);
-    var desde = r.ms ? Date.now() - r.ms : -Infinity;
-    var puntos = todos.filter(function (p) { return p.t >= desde; });
+    // El recorte por período lo hace /api/datos: pedirle solo el tramo que se
+    // va a dibujar es lo que evita arrastrar la serie entera en cada refresco.
+    var puntos = valoresDe(ultimoHistorico, def);
 
     caja.innerHTML = '';
     var pie = document.getElementById('pie-grafico');
@@ -466,10 +466,15 @@
     zona.addEventListener('pointerleave', esconder);
 
     var cambio = puntos[0].v ? ((ult.v - puntos[0].v) / puntos[0].v) * 100 : null;
+    var conteo = (ultimaFoto && ultimaFoto.puntos) || {};
     pie.textContent = def.nombre + ' · ' + def.unidad + ' · ' + puntos.length +
       (puntos.length === 1 ? ' registro' : ' registros') +
       ' · desde ' + reloj(new Date(t0).toISOString()) +
-      (cambio !== null ? ' · ' + (cambio > 0 ? '+' : '') + num(cambio, 2) + '% en el período' : '');
+      (cambio !== null ? ' · ' + (cambio > 0 ? '+' : '') + num(cambio, 2) + '% en el período' : '') +
+      // Un gráfico que no avisa que muestra una muestra miente por omisión.
+      (ultimaFoto && ultimaFoto.reducida
+        ? ' · muestra de ' + conteo.enRango + ' mediciones'
+        : '');
 
     dibujarTabla(puntos, def);
   }
@@ -551,6 +556,7 @@
   });
   engancharSelector('selector-rango', function (v) {
     rangoElegido = v; recordar('cotizaciones.rango', v);
+    traer(false); // el tramo lo recorta el servidor, así que hay que volver a pedir
   });
 
   // El gráfico se dibuja en píxeles reales, así que hay que rehacerlo si cambia
@@ -723,13 +729,18 @@
   }
 
   var REFRESCO = 2 * 60 * 1000;
+  var ultimaFoto = null;
 
   function sinDatos(mensaje) {
     document.getElementById('sello').innerHTML = '<span class="viejo">' + mensaje + '</span>';
   }
 
   function traer(primeraVez) {
-    return fetch('/api/datos', { cache: 'no-store' })
+    var caja = document.getElementById('grafico');
+    // Mientras recarga, el gráfico se mantiene con lo anterior atenuado: nada
+    // de esqueletos ni saltos de altura.
+    if (!primeraVez) caja.classList.add('cargando');
+    return fetch('/api/datos?rango=' + encodeURIComponent(rangoElegido), { cache: 'no-store' })
       .then(function (r) {
         if (!r.ok) throw new Error('HTTP ' + r.status);
         return r.json();
@@ -739,13 +750,15 @@
           sinDatos('todavía no corrió ninguna actualización');
           return;
         }
+        ultimaFoto = d;
         pintar(d);
       })
       .catch(function (e) {
         // Si ya hay algo pintado se deja como está: un corte de red no debe
         // borrar de la pantalla lo último que sí se supo.
         if (primeraVez) sinDatos('no se pudieron cargar los datos (' + e.message + ')');
-      });
+      })
+      .then(function () { caja.classList.remove('cargando'); });
   }
 
   sinDatos('cargando…');
