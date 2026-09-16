@@ -8,17 +8,25 @@ on:
   workflow_dispatch:
     inputs:
       script:
-        description: "sondeo = fuentes en producción · candidatos = fuentes a evaluar · ver-foto = la corrida entera, de punta a punta"
+        description: "sondeo = fuentes en producción · candidatos = fuentes a evaluar · ver-foto = la corrida entera · pizarra = de dónde sale el BROU y cada cuánto cambia"
         type: choice
         default: sondeo
-        options: [sondeo, candidatos, ver-foto]
+        options: [sondeo, candidatos, ver-foto, pizarra]
+      minutos:
+        description: "Solo para pizarra: cuántos minutos medir el sello de la fuente (0 = no medir)"
+        type: string
+        default: "0"
 
 jobs:
   explorar:
     runs-on: ubuntu-latest
+    # Medir una cadencia horaria lleva más que los 5 minutos que tarda el resto.
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
       - run: node scripts/${{ inputs.script }}.mjs
+        env:
+          MINUTOS: ${{ inputs.minutos }}
