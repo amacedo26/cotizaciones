@@ -133,6 +133,8 @@
   .nota { font-size: 12px; color: var(--tenue); margin-top: 10px; }
   footer { margin-top: 44px; padding-top: 18px; border-top: 1px solid var(--borde); font-size: 12px; color: var(--tenue); }
   footer code { background: var(--panel); padding: 1px 5px; border-radius: 4px; }
+  footer a { color: var(--tenue); text-decoration: underline; text-underline-offset: 2px; }
+  footer a:hover { color: var(--texto); }
   .sd { color: var(--tenue); font-weight: 400; font-size: 20px; }
 
   @media (max-width: 640px) {
@@ -183,13 +185,18 @@
   <div id="incidencias"></div>
 
   <footer>
-    Esta página no consulta ninguna fuente por su cuenta: lee <code>datos.js</code>.
-    Con el servidor local instalado se refresca cada 10 minutos; si no, depende del
-    respaldo horario de GitHub Actions.
+    Esta página no consulta ninguna fuente por su cuenta: pide <code>/api/datos</code>
+    cada 2 minutos. Las fuentes las consulta una función programada cada 10 minutos,
+    que es la frecuencia real con la que se renuevan los datos.
+    <a href="/api/estado">Estado del servicio</a> ·
+    <a href="/api/serie">serie completa</a>.
     <br>
     Oro y plata: gold-api.com · Divisas y DXY: Swissquote · Brasil: fxratesapi.com ·
-    Uruguay: Banco Central (se publica por día hábil) · Argentina: dolarapi.com.
+    Uruguay: Banco Central (se publica por día hábil) · Argentina: dolarapi.com,
+    contrastado con bluelytics.com.ar.
+    <br>
     El oro no cotiza los fines de semana, así que fuera de rueda el valor se repite.
+    Las variaciones son contra el valor de hace 24 horas.
   </footer>
 </div>
 
