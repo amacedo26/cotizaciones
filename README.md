@@ -57,7 +57,8 @@ que es desde donde corre la función. Verificado con `scripts/sondeo.mjs`:
 | forex-data-feed.swissquote.com | 200, bid/ask vivos en los 6 pares | ✅ en uso |
 | api.fxratesapi.com | 200, cotización por minuto | ✅ en uso |
 | dolarapi.com | 200, oficial y blue | ✅ en uso |
-| cotizaciones.bcu.gub.uy | 200, SOAP | ✅ en uso |
+| cotizaciones.bcu.gub.uy | 200, SOAP — dólar, UI y UR en el mismo servicio | ✅ en uso |
+| uy.dolarapi.com | 200, espeja la pizarra del BROU | ✅ en uso |
 | api.frankfurter.dev | 200, pero una tasa por día hábil | ✅ solo de respaldo |
 | api.bluelytics.com.ar | 200 | ✅ solo de respaldo |
 | Yahoo Finance | 429 en query1 y query2 | ❌ bloquea datacenters |
@@ -66,9 +67,30 @@ que es desde donde corre la función. Verificado con `scripts/sondeo.mjs`:
 | Swissquote USD/BRL y USD/ARS | devuelve `[]` | ❌ no los lista |
 | awesomeapi | 429, cuota agotada | ❌ desde IPs compartidas |
 | BEVSA | página de login | ❌ ver abajo |
+| www.brou.com.uy/cotizaciones | 200, pero el HTML no trae ni un número | ❌ arma la tabla en el navegador |
+| www.ine.gub.uy | no resuelve desde el runner | ❌ y tampoco publica nada consultable |
 
 Si alguna deja de responder: `npm run sondeo` desde cualquier máquina.
 Para explorar fuentes nuevas sin tocar el diagnóstico: `npm run candidatos`.
+Los dos necesitan salida a internet; el workflow manual «Explorar fuentes»
+(`.github/workflows/explorar.yml`) los corre desde un runner cuando la máquina
+de turno no la tiene. Es lo único que quedó en Actions y no toca datos.
+
+### BROU y las unidades de cuenta
+
+El BROU **no se puede leer de su propio sitio**: `www.brou.com.uy/cotizaciones`
+responde 200, pero la tabla la arma el navegador y el HTML que llega por `fetch`
+no tiene ni un número ni JSON embebido. Se usa el espejo de `uy.dolarapi.com`,
+y la tarjeta dice que es un espejo. La fila que se toma es la que el BROU rotula
+sólo «Dólar» —no eBROU ni cable—, que ahí viene como moneda `USD`.
+
+La **UI** y la **UR** las calcula el INE, pero el INE no publica ningún endpoint
+consultable (su sitio ni siquiera resuelve desde un runner). El BCU las
+republica en el mismo servicio SOAP que las monedas, con los códigos 9800 y
+9900 que salen de su propio catálogo (`awsbcumonedas`), no de memoria. Como el
+orden de magnitud es otro —UI ≈ 6,6 y UR ≈ 1.923 contra un dólar de ≈ 40—, la
+banda de valores plausibles pasó a ser un parámetro de `interpretarBcu`: con la
+del dólar las dos quedarían marcadas «para revisar». Hay una prueba que lo fija.
 
 ## Sobre BEVSA
 
@@ -114,6 +136,18 @@ Los controles de serie y período van **arriba** del gráfico, no adentro de su
 tarjeta: eligen qué se mira. El período por defecto es 24 horas porque a 144
 puntos por día la serie entera se vuelve ilegible en cualquier ancho de pantalla.
 
+**Las series diarias se grafican día a día.** El BCU, la UI y la UR publican un
+valor por día; el tablero mide cada 10 minutos igual, así que graficarlas tal
+cual repetía 144 veces el mismo número y convertía el escalón de un día al otro
+en una pared vertical entre dos mesetas. Esas tres series se colapsan a un punto
+por día calendario de Montevideo, quedándose con la **última medición del día que
+haya traído valor** (si el día entero vino vacío queda en nulo, para que el hueco
+se vea). No se pierde información: el valor no cambia dentro del día. Para ellas
+el selector de período no ofrece «24 horas», que daría uno o dos puntos.
+
+Con 45 puntos o menos cada medición lleva su marca: una línea sola sugiere un
+trazo continuo donde en realidad hay ocho lecturas unidas.
+
 **La línea se corta donde no hubo medición.** Dos casos distintos: cuando una
 fuente no dio valor en una corrida que sí ocurrió (el 2026-09-15 a las 06:10 el
 BCU no respondió y quedó un punto con `bcu: null`), y cuando faltan corridas
@@ -146,8 +180,6 @@ etiquetados como tales en pantalla:
   oficial. Difiere del valor publicado en el orden del 0,1 %. Hay una prueba
   que lo verifica contra un cálculo a mano.
 - **Brecha cambiaria**: el blue sobre el oficial argentino.
-- **Oro en pesos**: el oro en dólares por el dólar uruguayo de la misma corrida.
-  No es una cotización de mercado.
 
 La **variación** de cada tarjeta se calcula contra el valor de **hace 24 horas**,
 buscado sobre el histórico propio: ninguna de estas fuentes gratuitas publica un

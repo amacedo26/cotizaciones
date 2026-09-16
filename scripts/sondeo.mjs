@@ -1,14 +1,16 @@
 #!/usr/bin/env node
 // Diagnóstico de fuentes. No escribe nada.
 //
-// Primero revisa las cuatro que están en producción, después los respaldos, y
-// al final deja constancia de las que se descartaron y por qué, para no volver
-// a probarlas de memoria dentro de seis meses.
+// Primero revisa las que están en producción, después los respaldos, y al final
+// deja constancia de las que se descartaron y por qué, para no volver a
+// probarlas de memoria dentro de seis meses.
 //
 //   node scripts/sondeo.mjs
-// o desde Actions: workflow "Cotizaciones", modo = sondeo
+// Desde acá no se puede: hay que correrlo desde una IP con salida a internet
+// (workflow "Explorar fuentes" en Actions, cambiando el script que ejecuta).
 
-import { interpretarSwissquote, interpretarBcu, interpretarDolarApi, calcularDxy } from '../lib/parseo.mjs';
+import { interpretarSwissquote, interpretarBcu, interpretarBrou, interpretarDolarApi, calcularDxy,
+         UYU_MIN, UYU_MAX, UI_MIN, UI_MAX, UR_MIN, UR_MAX } from '../lib/parseo.mjs';
 
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
 const resultados = [];
@@ -66,16 +68,19 @@ for (const [moneda, par, invertido] of PARES) {
 }
 await revisar('DXY calculado', true, async () => calcularDxy(tasas));
 
-await revisar('BCU dólar uruguayo', true, async () => {
+// El dólar, la UI y la UR salen del mismo servicio y de la misma llamada, con
+// otro código de moneda. Las bandas son distintas porque los órdenes de
+// magnitud son distintos: ≈40, ≈6,6 y ≈1.900.
+async function bcuMoneda(moneda, dias, banda) {
   const hoy = new Date();
-  const desde = new Date(hoy.getTime() - 10 * 86400_000).toISOString().slice(0, 10);
+  const desde = new Date(hoy.getTime() - dias * 86400_000).toISOString().slice(0, 10);
   const { cuerpo, estado, ok } = await pedir('https://cotizaciones.bcu.gub.uy/wscotizaciones/servlet/awsbcucotizaciones', {
     method: 'POST',
     headers: { 'Content-Type': 'text/xml; charset=utf-8', SOAPAction: 'Cotizaaction/AWSBCUCOTIZACIONES.Execute' },
     body: `<?xml version="1.0" encoding="utf-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:cot="Cotiza">
   <soapenv:Body><cot:wsbcucotizaciones.Execute><cot:Entrada>
-    <cot:Moneda><cot:item>2225</cot:item></cot:Moneda>
+    <cot:Moneda><cot:item>${moneda}</cot:item></cot:Moneda>
     <cot:FechaDesde>${desde}</cot:FechaDesde>
     <cot:FechaHasta>${hoy.toISOString().slice(0, 10)}</cot:FechaHasta>
     <cot:Grupo>0</cot:Grupo>
@@ -83,9 +88,32 @@ await revisar('BCU dólar uruguayo', true, async () => {
 </soapenv:Envelope>`,
   });
   if (!ok) throw new Error(`HTTP ${estado}`);
-  const r = interpretarBcu(cuerpo);
+  const r = interpretarBcu(cuerpo, banda);
   if (r.estado !== 'ok') throw new Error(r.error);
+  return r;
+}
+
+await revisar('BCU dólar uruguayo', true, async () => {
+  const r = await bcuMoneda(2225, 10, { min: UYU_MIN, max: UYU_MAX });
   return `${r.promedio} UYU  (${r.fecha})`;
+});
+
+await revisar('BCU unidad indexada (UI)', true, async () => {
+  const r = await bcuMoneda(9800, 10, { min: UI_MIN, max: UI_MAX });
+  return `${r.promedio} UYU  (${r.fecha})`;
+});
+
+await revisar('BCU unidad reajustable (UR)', true, async () => {
+  const r = await bcuMoneda(9900, 45, { min: UR_MIN, max: UR_MAX });
+  return `${r.promedio} UYU  (${r.fecha})`;
+});
+
+await revisar('BROU (espejo uy.dolarapi)', true, async () => {
+  const { cuerpo, estado, ok } = await pedir('https://uy.dolarapi.com/v1/cotizaciones');
+  if (!ok) throw new Error(`HTTP ${estado}`);
+  const r = interpretarBrou(JSON.parse(cuerpo));
+  if (r.estado !== 'ok') throw new Error(r.error);
+  return `${r.compra} / ${r.venta}  (medio ${r.promedio})`;
 });
 
 await revisar('Brasil (fxratesapi)', true, async () => {

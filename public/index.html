@@ -41,6 +41,9 @@
   .viejo { color: var(--alerta); }
 
   .rejilla { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
+  /* Dos rejillas seguidas quedaban pegadas: la separación entre ellas tiene
+     que ser la misma que la que hay entre tarjetas. La vacía no separa nada. */
+  .rejilla + .rejilla:not(:empty) { margin-top: 14px; }
 
   .tarjeta {
     background: var(--panel);
@@ -153,11 +156,16 @@
   <h2>Región</h2>
   <div class="rejilla">
     <div class="tarjeta destacado" id="tarjeta-uyu"></div>
+    <div class="tarjeta destacado" id="tarjeta-brou"></div>
   </div>
   <div class="rejilla" id="rejilla-region"></div>
   <div class="rejilla" id="rejilla-bevsa"></div>
   <div id="aviso-argentina"></div>
   <p class="nota" id="nota-region"></p>
+
+  <h2>Unidades de cuenta</h2>
+  <div class="rejilla" id="rejilla-unidades"></div>
+  <p class="nota" id="nota-unidades"></p>
 
   <h2>Evolución</h2>
   <!-- Los controles van arriba del gráfico, no adentro: eligen qué se mira. -->
@@ -178,10 +186,6 @@
   <h2>Metales y dólar internacional</h2>
   <div class="rejilla" id="rejilla-mercado"></div>
 
-  <h2>Oro en pesos uruguayos <span style="text-transform:none;letter-spacing:0">(cálculo propio)</span></h2>
-  <div class="rejilla" id="rejilla-derivado"></div>
-  <p class="nota" id="nota-derivado"></p>
-
   <div id="incidencias"></div>
 
   <footer>
@@ -192,22 +196,31 @@
     <a href="/api/serie">serie completa</a>.
     <br>
     Oro y plata: gold-api.com · Divisas y DXY: Swissquote · Brasil: fxratesapi.com ·
-    Uruguay: Banco Central (se publica por día hábil) · Argentina: dolarapi.com,
-    contrastado con bluelytics.com.ar.
+    Uruguay: Banco Central (dólar, UI y UR; se publica por día hábil) y la pizarra
+    del BROU vía uy.dolarapi.com · Argentina: dolarapi.com, contrastado con
+    bluelytics.com.ar.
     <br>
+    La UI y la UR las calcula el INE: se leen del servicio del Banco Central porque
+    el INE no publica ninguno que se pueda consultar sin navegador.
     El oro no cotiza los fines de semana, así que fuera de rueda el valor se repite.
-    Las variaciones son contra el valor de hace 24 horas.
+    Las series que la fuente publica una vez por día se grafican día a día, con el
+    último valor de cada día. Las variaciones son contra el valor de hace 24 horas.
   </footer>
 </div>
 
 <script>
 (function () {
-  var DECIMALES = { oro: 2, plata: 2, dxy: 2, eurusd: 4, usdjpy: 2, uyu: 3, brl: 4, ars: 2 };
+  var DECIMALES = { oro: 2, plata: 2, dxy: 2, eurusd: 4, usdjpy: 2, uyu: 3, brl: 4, ars: 2,
+                    ui: 4, ur: 2, brou: 2 };  // el BROU publica dos decimales, el BCU tres
 
   // Series que puede mostrar el gráfico. "brecha" no está guardada en el
   // histórico: se calcula al vuelo desde el oficial y el blue de cada punto.
   var SERIES = [
-    { id: 'bcu',        nombre: 'Uruguay',      color: '#58a6ff', dec: 3, unidad: 'UYU por dólar' },
+    // "diaria" marca las series que la fuente publica una vez por día: el
+    // tablero las mide cada 10 minutos igual, pero graficarlas hora a hora
+    // repetiría 144 veces el mismo número y taparía el escalón de un día al otro.
+    { id: 'bcu',        nombre: 'Uruguay',      color: '#58a6ff', dec: 3, unidad: 'UYU por dólar', diaria: true },
+    { id: 'brou',       nombre: 'BROU',         color: '#f0883e', dec: 2, unidad: 'UYU por dólar — medio de la pizarra' },
     { id: 'brl',        nombre: 'Brasil',       color: '#3fb950', dec: 4, unidad: 'BRL por dólar' },
     { id: 'arsOficial', nombre: 'Arg. oficial', color: '#a371f7', dec: 2, unidad: 'ARS por dólar' },
     { id: 'arsBlue',    nombre: 'Arg. blue',    color: '#d29922', dec: 2, unidad: 'ARS por dólar' },
@@ -219,6 +232,8 @@
     { id: 'plata',      nombre: 'Plata',        color: '#56d4dd', dec: 2, unidad: 'USD por onza' },
     { id: 'dxy',        nombre: 'DXY',          color: '#79c0ff', dec: 2, unidad: 'puntos' },
     { id: 'eurusd',     nombre: 'EUR/USD',      color: '#56d364', dec: 4, unidad: 'USD por euro' },
+    { id: 'ui',         nombre: 'UI',           color: '#db61a2', dec: 4, unidad: 'pesos por unidad indexada', diaria: true },
+    { id: 'ur',         nombre: 'UR',           color: '#f778ba', dec: 2, unidad: 'pesos por unidad reajustable', diaria: true },
   ];
 
   // La elección del usuario es una comodidad, no un dato: si el navegador no
@@ -288,18 +303,56 @@
   var RANGOS = [
     { id: '24h',  nombre: '24 horas', ms: 24 * 3600 * 1000 },
     { id: '7d',   nombre: '7 días',   ms: 7 * 24 * 3600 * 1000 },
+    { id: '30d',  nombre: '30 días',  ms: 30 * 24 * 3600 * 1000 },
     { id: 'todo', nombre: 'Todo',     ms: null },
   ];
+  // Una serie diaria en 24 horas da uno o dos puntos: no es un gráfico.
+  var RANGOS_DIARIOS = ['7d', '30d', 'todo'];
+  function rangosPara(def) {
+    if (!def.diaria) return RANGOS;
+    return RANGOS.filter(function (r) { return RANGOS_DIARIOS.indexOf(r.id) >= 0; });
+  }
+  function rangoValido(def, id) {
+    var lista = rangosPara(def);
+    for (var i = 0; i < lista.length; i++) if (lista[i].id === id) return id;
+    return lista[0].id;
+  }
   var rangoElegido = recordado('cotizaciones.rango', '24h');
+  // La serie por defecto es el BCU, que es diaria: sin esto el primer pedido
+  // traería 24 horas y el gráfico abriría con un punto solo.
+  rangoElegido = rangoValido(definicion(serieElegida), rangoElegido);
 
   // Los nulos NO se filtran: un punto sin valor es la prueba de que en ese
   // momento no hubo medición, y el gráfico tiene que mostrar ese hueco en vez
   // de unir la línea por encima como si nada hubiera pasado.
   function valoresDe(historico, def) {
-    return (historico || []).map(function (p) {
+    var puntos = (historico || []).map(function (p) {
       var v = def.calcular ? def.calcular(p) : p[def.id];
       return { t: Date.parse(p.t), v: (typeof v === 'number' && isFinite(v)) ? v : null };
     }).filter(function (p) { return isFinite(p.t); });
+    return def.diaria ? porDia(puntos) : puntos;
+  }
+
+  // Día calendario en Montevideo: la fecha con la que el BCU rotula el valor.
+  function diaDe(ms) {
+    try {
+      // en-CA da AAAA-MM-DD, que ordena bien como texto
+      return new Date(ms).toLocaleDateString('en-CA', { timeZone: 'America/Montevideo' });
+    } catch (e) { return new Date(ms).toISOString().slice(0, 10); }
+  }
+
+  // De 144 mediciones por día queda una: la última del día que haya traído
+  // valor. Si el día entero vino vacío queda igual, en nulo, para que el hueco
+  // se vea. El valor de un día no cambia dentro del día, así que no se pierde
+  // nada: se saca la repetición, no la información.
+  function porDia(puntos) {
+    var dias = Object.create(null), orden = [];
+    for (var i = 0; i < puntos.length; i++) {
+      var d = diaDe(puntos[i].t);
+      if (!(d in dias)) { dias[d] = puntos[i]; orden.push(d); }
+      else if (puntos[i].v !== null || dias[d].v === null) dias[d] = puntos[i];
+    }
+    return orden.map(function (d) { return dias[d]; });
   }
 
   function conValor(puntos) {
@@ -365,6 +418,14 @@
     } catch (e) { return ''; }
   }
 
+  // Un punto de una serie diaria no tiene hora que valga la pena mostrar: la
+  // medición fue a las 14:03 pero el valor es el del día entero.
+  function cuandoDe(ms, diaria) {
+    if (!diaria) return reloj(new Date(ms).toISOString());
+    var d = diaDe(ms).split('-');
+    return d[2] + '/' + d[1] + '/' + d[0];
+  }
+
   var SVG = 'http://www.w3.org/2000/svg';
   function nodo(nombre, atributos) {
     var e = document.createElementNS(SVG, nombre);
@@ -388,7 +449,9 @@
 
     if (medidos.length < 2) {
       pie.textContent = medidos.length === 1
-        ? 'Un solo registro en este período: hacen falta dos para trazar una línea.'
+        ? (def.diaria
+            ? 'Un solo día con dato en este período: hacen falta dos para trazar una línea.'
+            : 'Un solo registro en este período: hacen falta dos para trazar una línea.')
         : 'Sin registros en este período.';
       dibujarTabla(puntos, def);
       return;
@@ -452,6 +515,15 @@
                                      'stroke-linejoin': 'round', 'stroke-linecap': 'round' }));
     });
 
+    // Con pocos puntos la línea sola engaña: parece un trazo continuo cuando en
+    // realidad son mediciones sueltas unidas. El punto marcado dice cuántas son.
+    if (medidos.length <= 45) {
+      medidos.forEach(function (p) {
+        svg.appendChild(nodo('circle', { cx: px(p.t), cy: py(p.v), r: 4, fill: def.color,
+                                         stroke: 'var(--panel)', 'stroke-width': 1.5 }));
+      });
+    }
+
     // el último valor va rotulado: el eje no tiene por qué cargar con el dato
     // que el lector busca primero
     var ult = medidos[medidos.length - 1];
@@ -501,7 +573,7 @@
       fila.appendChild(llave); fila.appendChild(valor);
       var cuando = document.createElement('div');
       cuando.className = 'cuando-globo';
-      cuando.textContent = reloj(new Date(p.t).toISOString());
+      cuando.textContent = cuandoDe(p.t, def.diaria);
       globo.appendChild(fila); globo.appendChild(cuando);
 
       var escala = caj.width / ancho;
@@ -524,12 +596,14 @@
     var cambio = medidos[0].v ? ((ult.v - medidos[0].v) / medidos[0].v) * 100 : null;
     var conteo = (ultimaFoto && ultimaFoto.puntos) || {};
     var huecos = corte.tramos.length - 1;
-    pie.textContent = def.nombre + ' · ' + def.unidad + ' · ' + medidos.length +
-      (medidos.length === 1 ? ' registro' : ' registros') +
-      ' · desde ' + reloj(new Date(t0).toISOString()) +
+    var unidadConteo = def.diaria
+      ? (medidos.length === 1 ? ' día' : ' días')
+      : (medidos.length === 1 ? ' registro' : ' registros');
+    pie.textContent = def.nombre + ' · ' + def.unidad + ' · ' + medidos.length + unidadConteo +
+      ' · desde ' + cuandoDe(t0, def.diaria) +
       (cambio !== null ? ' · ' + (cambio > 0 ? '+' : '') + num(cambio, 2) + '% en el período' : '') +
       // Un gráfico que no avisa que muestra una muestra miente por omisión.
-      (ultimaFoto && ultimaFoto.reducida
+      (ultimaFoto && ultimaFoto.reducida && !def.diaria
         ? ' · muestra de ' + conteo.enRango + ' mediciones'
         : '') +
       // Una línea cortada sin explicación desconcierta; con ella, informa.
@@ -547,13 +621,13 @@
     var tabla = document.getElementById('tabla-serie');
     tabla.innerHTML = '';
     var enc = tabla.insertRow();
-    ['Momento', def.unidad].forEach(function (t) {
+    [def.diaria ? 'Día' : 'Momento', def.unidad].forEach(function (t) {
       var th = document.createElement('th'); th.textContent = t; enc.appendChild(th);
     });
     var muestra = puntos.slice(-TOPE_TABLA).reverse();
     muestra.forEach(function (p) {
       var f = tabla.insertRow();
-      f.insertCell().textContent = reloj(new Date(p.t).toISOString());
+      f.insertCell().textContent = cuandoDe(p.t, def.diaria);
       f.insertCell().textContent = p.v === null ? 'sin dato' : num(p.v, def.dec);
     });
     var resumen = document.querySelector('#tabla-valores summary');
@@ -577,7 +651,7 @@
     if (!conDatos.length) conDatos = [SERIES[0]];
     if (!conDatos.some(function (d) { return d.id === serieElegida; })) serieElegida = conDatos[0].id;
     pintarBotones('selector-serie', conDatos, serieElegida, function (o) { return o.color; });
-    pintarBotones('selector-rango', RANGOS, rangoElegido, null);
+    pintarBotones('selector-rango', rangosPara(definicion(serieElegida)), rangoElegido, null);
   }
 
   function pintarGrafico(hist) {
@@ -614,6 +688,14 @@
   }
   engancharSelector('selector-serie', function (v) {
     serieElegida = v; recordar('cotizaciones.serie', v);
+    // Pasar a una serie diaria con "24 horas" puesto dejaría el gráfico en un
+    // punto. Se corrige el período y se vuelve a pedir, porque el recorte lo
+    // hace el servidor.
+    var corregido = rangoValido(definicion(v), rangoElegido);
+    if (corregido !== rangoElegido) {
+      rangoElegido = corregido; recordar('cotizaciones.rango', corregido);
+      traer(false);
+    }
   });
   engancharSelector('selector-rango', function (v) {
     rangoElegido = v; recordar('cotizaciones.rango', v);
@@ -671,6 +753,54 @@
       '<div class="pie">' + (b.estado === 'ok'
         ? ('cotización del ' + (reloj(b.fecha) || 'sin fecha') + ' · se publica por día hábil')
         : ('<span class="viejo">no se pudo leer: ' + (b.error || b.estado) + '</span>')) + '</div>';
+
+    // El BROU es la ventanilla del banco; el BCU, la referencia del Central.
+    // Son dos cotizaciones distintas y la tarjeta lo dice, para que nadie lea
+    // la diferencia entre las dos como un error.
+    var bk = D.brou || {};
+    var puntasBrou = (bk.compra !== null && bk.venta !== null && bk.compra !== bk.venta)
+      ? '<div class="puntas">' +
+        '<div class="punta"><span>Compra</span><b>' + (num(bk.compra, DECIMALES.brou) || '—') + '</b></div>' +
+        '<div class="punta"><span>Venta</span><b>' + (num(bk.venta, DECIMALES.brou) || '—') + '</b></div>' +
+        '</div>'
+      : '';
+    document.getElementById('tarjeta-brou').innerHTML =
+      '<div class="nombre">Banco República (BROU)</div>' +
+      '<div class="valor">' +
+        (bk.estado === 'ok' ? num(bk.promedio, DECIMALES.brou) : '<span class="sd">sin dato</span>') +
+        ' ' + delta(bk.variacion, bk.variacionDesde, bk.variacionCompleta) + '</div>' +
+      '<div class="unidad">pesos por dólar · punto medio de la pizarra</div>' +
+      puntasBrou +
+      '<div class="pie">' + (bk.estado === 'ok'
+        ? ((bk.fuente || '') + (bk.fecha ? ' · ' + reloj(bk.fecha) : ''))
+        : ('<span class="viejo">no se pudo leer: ' + (bk.error || bk.estado) + '</span>')) + '</div>';
+
+    // Unidades de cuenta. Las calcula el INE; se leen del servicio del BCU,
+    // que es el único que las publica en un formato que se puede consultar.
+    var un = D.unidades || {};
+    var unidades = [
+      { id: 'ui', nombre: 'Unidad Indexada (UI)', dato: un.ui || {}, dec: DECIMALES.ui,
+        cadencia: 'se publica todos los días', variacion: true },
+      { id: 'ur', nombre: 'Unidad Reajustable (UR)', dato: un.ur || {}, dec: DECIMALES.ur,
+        cadencia: 'se publica una vez por mes', variacion: false },
+    ];
+    document.getElementById('rejilla-unidades').innerHTML = unidades.map(function (u) {
+      var d = u.dato;
+      return '<div class="tarjeta"><div class="nombre">' + u.nombre + '</div>' +
+        '<div class="valor">' +
+          (d.estado === 'ok' ? num(d.valor, u.dec) : '<span class="sd">sin dato</span>') +
+          (u.variacion ? ' ' + delta(d.variacion, d.variacionDesde, d.variacionCompleta) : '') +
+        '</div>' +
+        '<div class="unidad">pesos</div>' +
+        '<div class="pie">' + (d.estado === 'ok'
+          ? ('valor del ' + (reloj(d.fecha) || 'sin fecha') + ' · ' + u.cadencia)
+          : ('<span class="viejo">no se pudo leer: ' + (d.error || d.estado) + '</span>')) +
+        '</div></div>';
+    }).join('');
+    document.getElementById('nota-unidades').textContent =
+      'Las calcula el INE. Acá se leen del servicio de cotizaciones del Banco Central, ' +
+      'que las republica: el INE no publica nada que se pueda consultar sin navegador. ' +
+      'La UR no lleva variación porque cambia una vez por mes.';
 
     ultimoHistorico = hist;
     pintarGrafico(hist);
@@ -769,20 +899,6 @@
     document.getElementById('rejilla-mercado').innerHTML = orden.map(function (id) {
       return D.mercado && D.mercado[id] ? tarjetaMercado(id, D.mercado[id]) : '';
     }).join('');
-
-    // Derivado
-    var d = D.derivado || {};
-    document.getElementById('nota-derivado').textContent = d.baseDolar
-      ? 'No es una cotización de mercado: es el oro en dólares multiplicado por el dólar ' +
-        d.baseDolar + ' de esta misma corrida.'
-      : 'Sin dólar uruguayo disponible en esta corrida, no se puede calcular.';
-    document.getElementById('rejilla-derivado').innerHTML =
-      '<div class="tarjeta oro"><div class="nombre">Onza troy</div><div class="valor">' +
-        (num(d.oroEnPesosPorOnza, 0) || '<span class="sd">sin dato</span>') +
-        '</div><div class="unidad">pesos por onza</div></div>' +
-      '<div class="tarjeta oro"><div class="nombre">Gramo</div><div class="valor">' +
-        (num(d.oroEnPesosPorGramo, 0) || '<span class="sd">sin dato</span>') +
-        '</div><div class="unidad">pesos por gramo</div></div>';
 
     // Incidencias de la última corrida
     var inc = D.incidencias || [];

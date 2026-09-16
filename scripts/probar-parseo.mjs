@@ -3,9 +3,10 @@
 //   node scripts/probar-parseo.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { aNumero, interpretarBevsa, interpretarBcu, interpretarSwissquote, interpretarDolarApi,
-         interpretarBluelytics, calcularBrecha, calcularDxy, fusionarHistoricos, podar,
-         contrastarArgentina, recortar, reducir, puntoDeReferencia } from '../lib/parseo.mjs';
+import { aNumero, interpretarBevsa, interpretarBcu, interpretarBrou, interpretarSwissquote,
+         interpretarDolarApi, interpretarBluelytics, calcularBrecha, calcularDxy,
+         fusionarHistoricos, podar, contrastarArgentina, recortar, reducir, puntoDeReferencia,
+         UI_MIN, UI_MAX, UR_MIN, UR_MAX } from '../lib/parseo.mjs';
 
 test('aNumero entiende los formatos de número que puede mandar el endpoint', () => {
   assert.equal(aNumero(41.25), 41.25);
@@ -116,6 +117,70 @@ test('BCU: respuesta vacía o basura no revienta', () => {
   assert.equal(interpretarBcu('').estado, 'error');
   assert.equal(interpretarBcu(null).estado, 'error');
   assert.equal(interpretarBcu('<html>error 500</html>').estado, 'error');
+});
+
+// Las unidades vienen del mismo servicio, con TCC y TCV iguales. Los valores
+// están copiados de la respuesta real del 2026-09-16.
+const soapUnidad = (moneda, nombre, iso, valor) => `<?xml version="1.0" encoding="utf-8"?>
+<SOAP-ENV:Envelope xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/">
+ <SOAP-ENV:Body><wsbcucotizaciones.ExecuteResponse xmlns="Cotiza"><Salida xmlns="Cotiza">
+  <respuestastatus><status>1</status><codigoerror>0</codigoerror><mensaje/></respuestastatus>
+  <datoscotizaciones>
+   <datoscotizaciones.dato xmlns="Cotiza">
+    <Fecha>2026-09-15</Fecha><Moneda>${moneda}</Moneda><Nombre>${nombre}</Nombre>
+    <CodigoISO>${iso}</CodigoISO><TCC>${valor}</TCC><TCV>${valor}</TCV>
+   </datoscotizaciones.dato>
+  </datoscotizaciones>
+ </Salida></wsbcucotizaciones.ExecuteResponse></SOAP-ENV:Body></SOAP-ENV:Envelope>`;
+
+test('UI y UR: la banda plausible es por moneda, no la del dólar', () => {
+  const ui = interpretarBcu(soapUnidad(9800, 'UNIDAD INDEXADA', 'U.I.', '6.630800'),
+                            { min: UI_MIN, max: UI_MAX });
+  assert.equal(ui.estado, 'ok');
+  assert.equal(ui.promedio, 6.6308);
+  assert.equal(ui.fecha, '2026-09-15');
+
+  const ur = interpretarBcu(soapUnidad(9900, 'UNIDAD REAJUSTAB', 'U.R.', '1923.440000'),
+                            { min: UR_MIN, max: UR_MAX });
+  assert.equal(ur.estado, 'ok');
+  assert.equal(ur.promedio, 1923.44);
+});
+
+test('UI y UR: con la banda del dólar las dos quedarían marcadas para revisar', () => {
+  // Es la prueba de que el parámetro hace falta: 6,63 y 1.923 caen fuera de 20–200.
+  assert.equal(interpretarBcu(soapUnidad(9800, 'UNIDAD INDEXADA', 'U.I.', '6.630800')).estado, 'revisar');
+  assert.equal(interpretarBcu(soapUnidad(9900, 'UNIDAD REAJUSTAB', 'U.R.', '1923.440000')).estado, 'revisar');
+});
+
+// Forma real de uy.dolarapi.com/v1/cotizaciones, registrada el 2026-09-16.
+const BROU = [
+  { moneda: 'USD', nombre: 'Dólar', compra: 39.05, venta: 41.25, fechaActualizacion: '2026-09-16T16:01:21.218Z' },
+  { moneda: 'EUR', nombre: 'Euro', compra: 44.15, venta: 48.77, fechaActualizacion: '2026-09-16T16:01:21.219Z' },
+  { moneda: 'BRL', nombre: 'Real', compra: 6.85, venta: 8.55, fechaActualizacion: '2026-09-16T16:01:21.219Z' },
+];
+
+test('BROU: toma el dólar y no la primera fila que encuentre', () => {
+  const r = interpretarBrou(BROU);
+  assert.equal(r.estado, 'ok');
+  assert.equal(r.compra, 39.05);
+  assert.equal(r.venta, 41.25);
+  assert.equal(r.promedio, 40.15);   // punto medio de una pizarra con 2,20 de spread
+  assert.equal(r.fecha, '2026-09-16T16:01:21.218Z');
+});
+
+test('BROU: el real es más barato que el dólar y no debe confundirse con él', () => {
+  // Sin el filtro por moneda, la primera fila de otra lista podría colarse.
+  const soloReal = BROU.filter((f) => f.moneda === 'BRL');
+  assert.equal(interpretarBrou(soloReal).estado, 'error');
+});
+
+test('BROU: respuestas rotas no revientan ni inventan un número', () => {
+  assert.equal(interpretarBrou(null).estado, 'error');
+  assert.equal(interpretarBrou({}).estado, 'error');
+  assert.equal(interpretarBrou([]).estado, 'error');
+  assert.equal(interpretarBrou([{ moneda: 'USD', compra: null, venta: null }]).estado, 'error');
+  // Un valor imposible se marca, no se publica.
+  assert.equal(interpretarBrou([{ moneda: 'USD', compra: 3905, venta: 4125 }]).estado, 'revisar');
 });
 
 test('DXY: reproduce el valor esperado con las tasas del BCE', () => {

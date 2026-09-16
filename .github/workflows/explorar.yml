@@ -1,9 +1,17 @@
-# Corrida manual: sirve para mirar fuentes nuevas desde una IP con salida a
+# Corrida manual: sirve para mirar las fuentes desde una IP con salida a
 # internet. No toca datos ni despliega nada; solo imprime lo que responden.
+#
+# Es lo único que quedó en Actions. El tablero corre en Netlify: ver el README.
 name: Explorar fuentes
 
 on:
   workflow_dispatch:
+    inputs:
+      script:
+        description: "sondeo = las que están en producción · candidatos = las que se están evaluando"
+        type: choice
+        default: sondeo
+        options: [sondeo, candidatos]
 
 jobs:
   explorar:
@@ -12,5 +20,5 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
-      - run: node scripts/candidatos.mjs
+          node-version: '22'
+      - run: node scripts/${{ inputs.script }}.mjs
