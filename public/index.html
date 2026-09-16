@@ -78,10 +78,20 @@
   /* start, no stretch: si no, la tarjeta del dólar se estira hasta el alto del
      gráfico y queda un hueco muerto adentro. */
   .bevsa { display: grid; grid-template-columns: 1.2fr 1fr; gap: 14px; align-items: start; }
-  .bevsa .puntas { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 6px; }
+  /* Las dos puntas van una al lado de la otra, no apiladas: apiladas estiraban
+     la tarjeta del BCU muy por encima de la del BROU, que va al lado. */
+  .puntas { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 6px; }
   .punta { background: rgba(255,255,255,.03); border-radius: 7px; padding: 9px 11px; }
   .punta span { display: block; font-size: 11px; color: var(--tenue); }
   .punta b { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+  /* Una pizarra bancaria no tiene un número: tiene dos. Las dos puntas van al
+     tamaño del valor principal porque las dos son el dato. */
+  .pizarra { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .pizarra span { display: block; font-size: 12px; color: var(--tenue); }
+  .pizarra b { font-size: 27px; font-weight: 600; font-variant-numeric: tabular-nums;
+               letter-spacing: -0.02em; }
+  .destacado .pizarra b { color: var(--acento); }
 
   .lamina { padding: 10px 14px 6px; position: relative; }
   #grafico { position: relative; width: 100%; }
@@ -143,6 +153,7 @@
   @media (max-width: 640px) {
     .bevsa { grid-template-columns: 1fr; }
     .tarjeta .valor { font-size: 24px; }
+    .pizarra b { font-size: 22px; }
   }
 </style>
 </head>
@@ -197,7 +208,7 @@
     <br>
     Oro y plata: gold-api.com · Divisas y DXY: Swissquote · Brasil: fxratesapi.com ·
     Uruguay: Banco Central (dólar, UI y UR; se publica por día hábil) y la pizarra
-    del BROU vía uy.dolarapi.com · Argentina: dolarapi.com, contrastado con
+    del BROU —sus dos puntas, sin promediarlas— vía uy.dolarapi.com · Argentina: dolarapi.com, contrastado con
     bluelytics.com.ar.
     <br>
     La UI y la UR las calcula el INE: se leen del servicio del Banco Central porque
@@ -220,7 +231,8 @@
     // tablero las mide cada 10 minutos igual, pero graficarlas hora a hora
     // repetiría 144 veces el mismo número y taparía el escalón de un día al otro.
     { id: 'bcu',        nombre: 'Uruguay',      color: '#58a6ff', dec: 3, unidad: 'UYU por dólar', diaria: true },
-    { id: 'brou',       nombre: 'BROU',         color: '#f0883e', dec: 2, unidad: 'UYU por dólar — medio de la pizarra' },
+    { id: 'brouCompra', nombre: 'BROU compra',  color: '#f0883e', dec: 2, unidad: 'UYU por dólar — le compra al público' },
+    { id: 'brouVenta',  nombre: 'BROU venta',   color: '#ffb77c', dec: 2, unidad: 'UYU por dólar — le vende al público' },
     { id: 'brl',        nombre: 'Brasil',       color: '#3fb950', dec: 4, unidad: 'BRL por dólar' },
     { id: 'arsOficial', nombre: 'Arg. oficial', color: '#a371f7', dec: 2, unidad: 'ARS por dólar' },
     { id: 'arsBlue',    nombre: 'Arg. blue',    color: '#d29922', dec: 2, unidad: 'ARS por dólar' },
@@ -758,19 +770,15 @@
     // Son dos cotizaciones distintas y la tarjeta lo dice, para que nadie lea
     // la diferencia entre las dos como un error.
     var bk = D.brou || {};
-    var puntasBrou = (bk.compra !== null && bk.venta !== null && bk.compra !== bk.venta)
-      ? '<div class="puntas">' +
-        '<div class="punta"><span>Compra</span><b>' + (num(bk.compra, DECIMALES.brou) || '—') + '</b></div>' +
-        '<div class="punta"><span>Venta</span><b>' + (num(bk.venta, DECIMALES.brou) || '—') + '</b></div>' +
-        '</div>'
-      : '';
+    function ladoBrou(rotulo, lado) {
+      return '<div><span>' + rotulo + '</span><b>' +
+        (lado ? num(lado.valor, DECIMALES.brou) : '<span class="sd">sin dato</span>') + '</b> ' +
+        (lado ? delta(lado.variacion, lado.variacionDesde, lado.variacionCompleta) : '') + '</div>';
+    }
     document.getElementById('tarjeta-brou').innerHTML =
       '<div class="nombre">Banco República (BROU)</div>' +
-      '<div class="valor">' +
-        (bk.estado === 'ok' ? num(bk.promedio, DECIMALES.brou) : '<span class="sd">sin dato</span>') +
-        ' ' + delta(bk.variacion, bk.variacionDesde, bk.variacionCompleta) + '</div>' +
-      '<div class="unidad">pesos por dólar · punto medio de la pizarra</div>' +
-      puntasBrou +
+      '<div class="pizarra">' + ladoBrou('Compra', bk.compra) + ladoBrou('Venta', bk.venta) + '</div>' +
+      '<div class="unidad">pesos por dólar · pizarra del banco</div>' +
       '<div class="pie">' + (bk.estado === 'ok'
         ? ((bk.fuente || '') + (bk.fecha ? ' · ' + reloj(bk.fecha) : ''))
         : ('<span class="viejo">no se pudo leer: ' + (bk.error || bk.estado) + '</span>')) + '</div>';

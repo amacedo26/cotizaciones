@@ -84,6 +84,12 @@ no tiene ni un número ni JSON embebido. Se usa el espejo de `uy.dolarapi.com`,
 y la tarjeta dice que es un espejo. La fila que se toma es la que el BROU rotula
 sólo «Dólar» —no eBROU ni cable—, que ahí viene como moneda `USD`.
 
+De la pizarra se muestran **las dos puntas, sin promediarlas**, y cada una es su
+propia serie (`brouCompra` y `brouVenta`). El punto medio no lo publica el banco:
+es una cuenta sobre un spread de más de dos pesos y nadie opera a ese precio. El
+BCU sí conserva su promedio, porque ahí las dos puntas difieren en 0,40 y el
+Central publica esa referencia.
+
 La **UI** y la **UR** las calcula el INE, pero el INE no publica ningún endpoint
 consultable (su sitio ni siquiera resuelve desde un runner). El BCU las
 republica en el mismo servicio SOAP que las monedas, con los códigos 9800 y
