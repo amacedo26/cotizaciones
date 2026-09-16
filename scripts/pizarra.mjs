@@ -71,6 +71,62 @@ for (const ruta of propios) {
   console.log(`  [${ruta}] ${js.cuerpo.length} bytes · candidatos: ${urls.slice(0, 10).join(' , ') || 'ninguno'}`);
 }
 
+console.log('\n\n=== 1b. El portlet de cotizaciones, atacado de frente ===');
+// El portal es Liferay y la tabla vive en un portlet identificado en el HTML.
+// Liferay sabe servir un portlet solo, sin la página alrededor: si eso
+// funciona, el número sale del banco y no de un espejo.
+const PORTLET = 'cotizacionfull_WAR_broutmfportlet_INSTANCE_otHfewh1klyS';
+const BASE = 'https://www.brou.com.uy/cotizaciones';
+
+function cuantosNumeros(texto) {
+  const cerca = [...texto.matchAll(/[Dd][óo]lar[\s\S]{0,400}?(\d{1,3}[.,]\d{2})/g)].map((m) => m[1]);
+  const sueltos = [...texto.matchAll(/\b(3\d|4\d)[.,]\d{2}\b/g)].map((m) => m[0]);
+  return { cerca: [...new Set(cerca)], plausibles: [...new Set(sueltos)] };
+}
+
+for (const [etiqueta, extra] of [
+  ['exclusive',       `p_p_id=${PORTLET}&p_p_lifecycle=0&p_p_state=exclusive&p_p_mode=view`],
+  ['isolated',        `p_p_id=${PORTLET}&p_p_lifecycle=0&p_p_state=normal&p_p_mode=view&p_p_isolated=1`],
+  ['resource',        `p_p_id=${PORTLET}&p_p_lifecycle=2&p_p_state=normal&p_p_mode=view`],
+  ['resource+json',   `p_p_id=${PORTLET}&p_p_lifecycle=2&p_p_state=exclusive&p_p_mode=view&p_p_resource_id=cotizaciones`],
+]) {
+  const r = await traer(`${BASE}?${extra}`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+  const n = cuantosNumeros(r.cuerpo || '');
+  console.log(`\n[portlet ${etiqueta}] ${r.estado} ${r.tipo} — ${(r.cuerpo || '').length} bytes`);
+  console.log(`  cerca de "Dólar": ${n.cerca.join(' | ') || 'ninguno'}`);
+  console.log(`  números 30–49 con dos decimales: ${n.plausibles.slice(0, 12).join(' | ') || 'ninguno'}`);
+  if (n.cerca.length || n.plausibles.length) {
+    console.log('  ' + (r.cuerpo || '').replace(/\s+/g, ' ').slice(0, 500));
+  }
+}
+
+// El JS propio del portlet es donde estaría la URL que pide los datos.
+console.log('\n--- brou-tmf-portlets.js ---');
+const tmf = await traer('https://www.brou.com.uy/brou-tmf-portlet/js/brou-tmf-portlets.js');
+if (tmf.ok) {
+  const urls = [...new Set([...tmf.cuerpo.matchAll(/["'`]([^"'`\s]*(?:cotiza|resource_id|lifecycle|\/api\/|\.json)[^"'`\s]*)["'`]/gi)].map((m) => m[1]))];
+  console.log(`  ${tmf.cuerpo.length} bytes · ${urls.length} candidatos`);
+  urls.slice(0, 25).forEach((u) => console.log('    ' + u));
+} else {
+  console.log(`  ${tmf.estado} ${tmf.tipo}`);
+}
+
+// cotizaciones.com.uy es una app JS: su API estaría en el bundle.
+console.log('\n--- cotizaciones.com.uy: buscando su API ---');
+const cuy = await traer('https://cotizaciones.com.uy/');
+if (cuy.ok) {
+  const bundles = [...new Set([...cuy.cuerpo.matchAll(/<script[^>]+src="([^"]+)"/g)].map((m) => m[1]))];
+  console.log('  bundles: ' + (bundles.join(' , ') || 'ninguno'));
+  for (const b of bundles.slice(0, 3)) {
+    const url = b.startsWith('http') ? b : 'https://cotizaciones.com.uy' + (b.startsWith('/') ? b : '/' + b);
+    const js = await traer(url);
+    if (!js.ok) { console.log(`  [${b}] ${js.estado}`); continue; }
+    const apis = [...new Set([...js.cuerpo.matchAll(/https?:\/\/[a-z0-9.\-]+\/[^"'`\s]{0,80}/gi)].map((m) => m[0]))]
+      .filter((u) => /api|cotiza|json|firebase|supabase/i.test(u));
+    console.log(`  [${b}] ${js.cuerpo.length} bytes · ${apis.slice(0, 10).join(' , ') || 'sin candidatos'}`);
+  }
+}
+
 console.log('\n\n=== 2. Otros espejos y APIs de cotizaciones uruguayas ===');
 await probar('dolarapi uy (raíz)', 'https://uy.dolarapi.com/', 200);
 await probar('dolarapi docs', 'https://docs.dolarapi.com/', 200);
