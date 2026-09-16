@@ -264,6 +264,13 @@
     return new Intl.NumberFormat('es-UY', { minimumFractionDigits: dec, maximumFractionDigits: dec }).format(v);
   }
 
+  // num() devuelve null cuando no hay número, y concatenar null escribe "null"
+  // en la tarjeta. Nunca hay que mostrar eso: si no hay dato, se dice.
+  function cifra(v, dec) {
+    var t = num(v, dec);
+    return t === null ? '<span class="sd">sin dato</span>' : t;
+  }
+
   function hace(iso) {
     if (!iso) return 'sin fecha';
     var min = Math.round((Date.now() - Date.parse(iso)) / 60000);
@@ -747,7 +754,7 @@
     // alguien cargó una cookie de sesión válida, porque su acceso exige login.
     var b = D.bcu || {};
     var prom = b.promedio === null || b.promedio === undefined
-      ? '<span class="sd">sin dato</span>' : num(b.promedio, DECIMALES.uyu);
+      ? '<span class="sd">sin dato</span>' : cifra(b.promedio, DECIMALES.uyu);
     // El BCU devuelve compra y venta iguales para varias monedas. Mostrar las
     // dos puntas idénticas sugiere un spread que no existe, así que se omiten.
     var puntas = '';
@@ -770,10 +777,16 @@
     // Son dos cotizaciones distintas y la tarjeta lo dice, para que nadie lea
     // la diferencia entre las dos como un error.
     var bk = D.brou || {};
+    // Acepta también la forma vieja (el número suelto, sin envoltorio). Entre que
+    // se publica un despliegue y corre la función programada hay una ventana en
+    // la que la página es nueva y la foto guardada todavía es vieja: la tarjeta
+    // tiene que sobrevivir a eso sin escribir basura.
     function ladoBrou(rotulo, lado) {
+      var objeto = lado && typeof lado === 'object';
       return '<div><span>' + rotulo + '</span><b>' +
-        (lado ? num(lado.valor, DECIMALES.brou) : '<span class="sd">sin dato</span>') + '</b> ' +
-        (lado ? delta(lado.variacion, lado.variacionDesde, lado.variacionCompleta) : '') + '</div>';
+        cifra(objeto ? lado.valor : lado, DECIMALES.brou) + '</b> ' +
+        (objeto ? delta(lado.variacion, lado.variacionDesde, lado.variacionCompleta) : '') +
+        '</div>';
     }
     document.getElementById('tarjeta-brou').innerHTML =
       '<div class="nombre">Banco República (BROU)</div>' +
@@ -796,7 +809,7 @@
       var d = u.dato;
       return '<div class="tarjeta"><div class="nombre">' + u.nombre + '</div>' +
         '<div class="valor">' +
-          (d.estado === 'ok' ? num(d.valor, u.dec) : '<span class="sd">sin dato</span>') +
+          (d.estado === 'ok' ? cifra(d.valor, u.dec) : '<span class="sd">sin dato</span>') +
           (u.variacion ? ' ' + delta(d.variacion, d.variacionDesde, d.variacionCompleta) : '') +
         '</div>' +
         '<div class="unidad">pesos</div>' +
