@@ -258,11 +258,19 @@
     } catch (e) { return iso; }
   }
 
-  function delta(v) {
+  // El número está siempre a la vista; el lapso exacto va en el tooltip nativo,
+  // que es detalle secundario y no tiene por qué ocupar lugar en la tarjeta.
+  function delta(v, desde, completa) {
     if (v === null || v === undefined) return '';
     var clase = v > 0 ? 'sube' : v < 0 ? 'baja' : 'plano';
     var signo = v > 0 ? '+' : '';
-    return '<span class="delta ' + clase + '">' + signo + num(v, 2) + '%</span>';
+    var titulo = '';
+    if (desde) {
+      var horas = Math.round((Date.now() - Date.parse(desde)) / 36e5);
+      titulo = ' title="' + (completa === false ? 'solo hay ' + horas + ' h de historia — ' : '') +
+               'desde ' + reloj(desde) + '"';
+    }
+    return '<span class="delta ' + clase + '"' + titulo + '>' + signo + num(v, 2) + '%</span>';
   }
 
   // --- el gráfico ------------------------------------------------------------
@@ -579,7 +587,7 @@
       : num(m.precio, dec);
     return '<div class="tarjeta' + (id === 'oro' ? ' oro' : '') + '">' +
       '<div class="nombre">' + m.nombre + '</div>' +
-      '<div class="valor">' + valor + ' ' + delta(m.variacion) + '</div>' +
+      '<div class="valor">' + valor + ' ' + delta(m.variacion, m.variacionDesde, m.variacionCompleta) + '</div>' +
       '<div class="unidad">' + m.unidad + '</div>' +
       '<div class="pie">' + (m.fuente ? m.fuente + ' · ' : '') +
         (m.momento ? reloj(m.momento) : (m.estado === 'error' ? 'fuente caída' : '')) + '</div>' +
@@ -626,7 +634,12 @@
     document.getElementById('sello').innerHTML =
       'Actualizado <strong class="' + (viejo ? 'viejo' : '') + '">' + hace(D.actualizado) + '</strong>' +
       ' · ' + reloj(D.actualizado) + ' (Montevideo)' +
-      (D.comparadoCon ? ' · variación contra ' + reloj(D.comparadoCon) : '') +
+      (D.variacionVentanaHoras
+        ? ' · variación en ' + D.variacionVentanaHoras + ' h' +
+          (D.variacionMasCortaHoras
+            ? ' (alguna serie tiene solo ' + num(D.variacionMasCortaHoras, 1) + ' h de historia)'
+            : '')
+        : '') +
       (viejo ? ' <span class="viejo">— el cron no corrió a horario</span>' : '');
 
     // Dólar uruguayo: el BCU es la fuente automática; BEVSA solo aparece si
@@ -645,7 +658,7 @@
     }
     document.getElementById('tarjeta-uyu').innerHTML =
       '<div class="nombre">Banco Central del Uruguay</div>' +
-      '<div class="valor">' + prom + ' ' + delta(b.variacion) + '</div>' +
+      '<div class="valor">' + prom + ' ' + delta(b.variacion, b.variacionDesde, b.variacionCompleta) + '</div>' +
       '<div class="unidad">pesos por dólar' + (b.nombre ? ' · ' + b.nombre.toLowerCase() : '') + '</div>' +
       puntas +
       '<div class="pie">' + (b.estado === 'ok'
@@ -663,7 +676,7 @@
 
     tarjetas.push('<div class="tarjeta"><div class="nombre">Brasil — real</div>' +
       '<div class="valor">' + (num(br.valor, DECIMALES.brl) || '<span class="sd">sin dato</span>') +
-        ' ' + delta(br.variacion) + '</div>' +
+        ' ' + delta(br.variacion, br.variacionDesde, br.variacionCompleta) + '</div>' +
       '<div class="unidad">reales por dólar</div>' +
       '<div class="pie">' + (br.estado === 'ok'
         ? (br.fuente + (br.vivo ? '' : ' · referencia diaria') +
@@ -673,7 +686,7 @@
     if (ar.oficial) {
       tarjetas.push('<div class="tarjeta"><div class="nombre">Argentina — oficial</div>' +
         '<div class="valor">' + num(ar.oficial.promedio, DECIMALES.ars) +
-          ' ' + delta(ar.oficial.variacion) + '</div>' +
+          ' ' + delta(ar.oficial.variacion, ar.oficial.variacionDesde, ar.oficial.variacionCompleta) + '</div>' +
         '<div class="unidad">pesos argentinos por dólar</div>' +
         '<div class="pie">' + (ar.fuente || '') +
           (ar.oficial.fecha ? ' · ' + reloj(ar.oficial.fecha) : '') + '</div></div>');
@@ -683,7 +696,7 @@
       tarjetas.push('<div class="tarjeta informal"><div class="nombre">Argentina — blue' +
         '<span class="etiqueta">informal</span></div>' +
         '<div class="valor">' + num(ar.blue.promedio, DECIMALES.ars) +
-          ' ' + delta(ar.blue.variacion) + '</div>' +
+          ' ' + delta(ar.blue.variacion, ar.blue.variacionDesde, ar.blue.variacionCompleta) + '</div>' +
         '<div class="unidad">pesos argentinos por dólar</div>' +
         '<div class="pie">' + (ar.fuente || '') + ' · sin fuente oficial' +
           (ar.blue.fecha ? ' · ' + reloj(ar.blue.fecha) : '') + '</div></div>');

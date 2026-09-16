@@ -149,10 +149,22 @@ etiquetados como tales en pantalla:
 - **Oro en pesos**: el oro en dólares por el dólar uruguayo de la misma corrida.
   No es una cotización de mercado.
 
-La **variación** de cada tarjeta se calcula contra la corrida anterior propia:
-ninguna de estas fuentes gratuitas publica el valor previo. El encabezado dice
-contra qué momento se está comparando, porque tras un corte la comparación
-puede ser contra algo viejo y un salto grande parecería un error de datos.
+La **variación** de cada tarjeta se calcula contra el valor de **hace 24 horas**,
+buscado sobre el histórico propio: ninguna de estas fuentes gratuitas publica un
+valor previo.
+
+Antes se comparaba contra la medición anterior, diez minutos atrás. Servía para
+el oro, que se mueve todo el tiempo, pero no para el dólar del Banco Central:
+cambia una vez por día, así que 143 de cada 144 corridas daban 0 % y el tablero
+decía «no se movió» el día entero justo cuando sí se había movido. El caso que
+lo destapó: 40,218 el 14 y 40,191 el 15, con un 0 % al lado.
+
+La referencia se busca **por serie**, no una sola para todas: `brl` y los valores
+argentinos empezaron a medirse después que el resto, y una referencia común los
+compararía contra un momento en el que no existían. Cuando una serie no llega a
+las 24 horas se usa su punto más viejo y se declara el lapso real —en el tooltip
+de la tarjeta y en el encabezado—, porque decir «en 6 h» es honesto y fingir 24
+no lo es.
 
 ## El dólar blue
 

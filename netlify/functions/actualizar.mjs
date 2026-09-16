@@ -28,8 +28,8 @@ export default async (req) => {
       ? fusionarHistoricos(previa, [punto])
       : previa;
 
-    // contra el último punto anterior a esta corrida, no contra sí mismo
-    aplicarVariaciones(foto, punto, previa.length ? previa[previa.length - 1] : null);
+    // contra el punto de hace 24 horas, buscado por serie sobre el histórico
+    aplicarVariaciones(foto, punto, previa);
 
     await store.setJSON(CLAVE_SERIE, serie);
     await store.setJSON(CLAVE_FOTO, { ...foto, puntos: serie.length });

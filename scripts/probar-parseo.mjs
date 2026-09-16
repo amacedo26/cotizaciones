@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { aNumero, interpretarBevsa, interpretarBcu, interpretarSwissquote, interpretarDolarApi,
          interpretarBluelytics, calcularBrecha, calcularDxy, fusionarHistoricos, podar,
-         contrastarArgentina, recortar, reducir } from '../lib/parseo.mjs';
+         contrastarArgentina, recortar, reducir, puntoDeReferencia } from '../lib/parseo.mjs';
 
 test('aNumero entiende los formatos de número que puede mandar el endpoint', () => {
   assert.equal(aNumero(41.25), 41.25);
@@ -320,4 +320,57 @@ test('reducir: la serie devuelta mantiene el orden temporal', () => {
   for (let i = 1; i < r.length; i++) {
     assert.ok(Date.parse(r[i].t) > Date.parse(r[i - 1].t), `desorden en ${i}`);
   }
+});
+
+// Serie de dos días a diez minutos, con una clave que empieza tarde y un hueco.
+const DOS_DIAS = Array.from({ length: 288 }, (_, i) => {
+  const t = Date.parse('2026-09-14T18:00:00.000Z') + i * 10 * 60 * 1000;
+  const p = { t: new Date(t).toISOString(), bcu: i < 200 ? 40.218 : 40.191 };
+  if (i >= 200) p.brl = 5.15;        // empieza tarde, como pasó de verdad
+  if (i === 150) p.bcu = null;       // la fuente no respondió esa vez
+  return p;
+});
+const AHORA = Date.parse('2026-09-14T18:00:00.000Z') + 287 * 10 * 60 * 1000;
+const HACE_24H = AHORA - 24 * 3600 * 1000;
+
+test('referencia: toma el punto de hace 24 h, no el anterior', () => {
+  const r = puntoDeReferencia(DOS_DIAS, 'bcu', HACE_24H);
+  assert.equal(r.completa, true);
+  assert.ok(Date.parse(r.punto.t) <= HACE_24H, 'la referencia no puede ser posterior al objetivo');
+  assert.ok(AHORA - Date.parse(r.punto.t) <= 24 * 3600 * 1000 + 10 * 60 * 1000, 'ni mucho más vieja');
+});
+
+test('referencia: una serie más corta que 24 h usa su punto más viejo', () => {
+  const corta = DOS_DIAS.slice(-30);   // cinco horas
+  const r = puntoDeReferencia(corta, 'bcu', HACE_24H);
+  assert.equal(r.completa, false);     // se declara que no llega a las 24 h
+  assert.equal(r.punto.t, corta[0].t);
+});
+
+test('referencia: una clave que empieza tarde se compara con su propio inicio', () => {
+  const r = puntoDeReferencia(DOS_DIAS, 'brl', HACE_24H);
+  assert.equal(r.completa, false);
+  assert.equal(r.punto.t, DOS_DIAS[200].t);  // el primero que tiene brl
+});
+
+test('referencia: se saltea el punto donde la fuente no respondió', () => {
+  const objetivo = Date.parse(DOS_DIAS[150].t);
+  const r = puntoDeReferencia(DOS_DIAS, 'bcu', objetivo);
+  assert.notEqual(r.punto.t, DOS_DIAS[150].t);
+  assert.equal(r.punto.t, DOS_DIAS[149].t);
+});
+
+test('referencia: el caso real — ayer un valor, hoy otro, y la variación aparece', () => {
+  const r = puntoDeReferencia(DOS_DIAS, 'bcu', HACE_24H);
+  const ahora = DOS_DIAS[DOS_DIAS.length - 1].bcu;
+  assert.equal(r.punto.bcu, 40.218);   // lo que valía hace 24 h
+  assert.equal(ahora, 40.191);         // lo que vale ahora
+  const variacion = +(((ahora - r.punto.bcu) / r.punto.bcu) * 100).toFixed(2);
+  assert.equal(variacion, -0.07);      // el número que el tablero mostraba como 0 %
+});
+
+test('referencia: sin ningún valor devuelve null en vez de inventar uno', () => {
+  assert.equal(puntoDeReferencia([], 'bcu', HACE_24H), null);
+  assert.equal(puntoDeReferencia(DOS_DIAS, 'noExiste', HACE_24H), null);
+  assert.equal(puntoDeReferencia(null, 'bcu', HACE_24H), null);
 });
