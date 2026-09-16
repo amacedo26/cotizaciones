@@ -90,6 +90,33 @@ es una cuenta sobre un spread de más de dos pesos y nadie opera a ese precio. E
 BCU sí conserva su promedio, porque ahí las dos puntas difieren en 0,40 y el
 Central publica esa referencia.
 
+El espejo **relee la pizarra una vez por hora, al minuto :01**. Está medido, no
+deducido: el 2026-09-16 se leyó la fuente cada dos minutos durante 75 minutos y
+el sello saltó de `17:01:03.239` a `18:01:03.562` —3.600,3 segundos— mientras el
+valor no se movía. Es un reloj, no una reacción al cambio.
+
+De ahí sale el techo real del BROU: el tablero consulta cada 10 minutos, pero
+nueve de cada diez consultas releen un número idéntico, y un cambio del banco
+aparece en el tablero a las **:10 de alguna hora**. Entre 10 y 68 minutos de
+atraso según cuándo mueva. Verificado con un cambio real ese mismo día: el banco
+pasó la venta de 41,25 a 41,45, el espejo lo tomó a las 17:01 y el tablero lo
+publicó a las 17:10.
+
+Por eso el pie de la tarjeta dice **«leído»** y no la hora de la cotización: el
+sello que trae la fuente es cuándo miró el espejo, no cuándo movió el banco. La
+fuente no informa lo segundo.
+
+Se buscó algo mejor y no hay. Al portlet de Liferay que tiene la tabla
+(`cotizacionfull_WAR_broutmfportlet`) se le pidieron las cuatro variantes que
+Liferay sirve —`p_p_state=exclusive`, `p_p_isolated=1` y dos de
+`p_p_lifecycle=2`— y ninguna trae un número; su JS propio pesa 1.684 bytes y no
+tiene ninguna URL adentro. De los otros espejos, `dolar.uy`, `preciodolar` y
+`ebrou` no resuelven, `cambio.uy` está en construcción y `cotizaciones.com.uy`
+sirve un captcha. Un navegador headless sí leería la página, pero no cabe en una
+función de Netlify de 30 segundos: obligaría a un segundo proceso en Actions,
+cuyos horarios ya fallaron 2 de 2 veces. Mucho aparato para una pizarra que se
+mueve un par de veces por día.
+
 La **UI** y la **UR** las calcula el INE, pero el INE no publica ningún endpoint
 consultable (su sitio ni siquiera resuelve desde un runner). El BCU las
 republica en el mismo servicio SOAP que las monedas, con los códigos 9800 y

@@ -208,7 +208,8 @@
     <br>
     Oro y plata: gold-api.com · Divisas y DXY: Swissquote · Brasil: fxratesapi.com ·
     Uruguay: Banco Central (dólar, UI y UR; se publica por día hábil) y la pizarra
-    del BROU —sus dos puntas, sin promediarlas— vía uy.dolarapi.com · Argentina: dolarapi.com, contrastado con
+    del BROU —sus dos puntas, sin promediarlas— vía uy.dolarapi.com, que la relee
+    una vez por hora · Argentina: dolarapi.com, contrastado con
     bluelytics.com.ar.
     <br>
     La UI y la UR las calcula el INE; se leen del servicio del Banco Central.
@@ -744,7 +745,7 @@
       (D.variacionVentanaHoras
         ? ' · variación en ' + D.variacionVentanaHoras + ' h' +
           (D.variacionMasCortaHoras
-            ? ' (alguna serie tiene solo ' + num(D.variacionMasCortaHoras, 1) + ' h de historia)'
+            ? ' (alguna serie tiene solo ' + cifra(D.variacionMasCortaHoras, 1) + ' h de historia)'
             : '')
         : '') +
       (viejo ? ' <span class="viejo">— el cron no corrió a horario</span>' : '');
@@ -791,8 +792,13 @@
       '<div class="nombre">Banco República (BROU)</div>' +
       '<div class="pizarra">' + ladoBrou('Compra', bk.compra) + ladoBrou('Venta', bk.venta) + '</div>' +
       '<div class="unidad">pesos por dólar · pizarra del banco</div>' +
+      // El sello que trae la fuente NO es cuándo movió el banco: es cuándo el
+      // espejo leyó la pizarra. Medido el 2026-09-16 con 38 lecturas seguidas:
+      // relee al minuto :01 de cada hora, en punto, cambie o no el valor.
       '<div class="pie">' + (bk.estado === 'ok'
-        ? ((bk.fuente || '') + (bk.fecha ? ' · ' + reloj(bk.fecha) : ''))
+        ? ('espejo de ' + (bk.fuente || '') +
+           (bk.fecha ? ' · leído ' + reloj(bk.fecha) : '') +
+           ' · relee la pizarra una vez por hora')
         : ('<span class="viejo">no se pudo leer: ' + (bk.error || bk.estado) + '</span>')) + '</div>';
 
     // Unidades de cuenta. Las calcula el INE; se leen del servicio del BCU,
@@ -841,7 +847,7 @@
 
     if (ar.oficial) {
       tarjetas.push('<div class="tarjeta"><div class="nombre">Argentina — oficial</div>' +
-        '<div class="valor">' + num(ar.oficial.promedio, DECIMALES.ars) +
+        '<div class="valor">' + cifra(ar.oficial.promedio, DECIMALES.ars) +
           ' ' + delta(ar.oficial.variacion, ar.oficial.variacionDesde, ar.oficial.variacionCompleta) + '</div>' +
         '<div class="unidad">pesos argentinos por dólar</div>' +
         '<div class="pie">' + (ar.fuente || '') +
@@ -851,7 +857,7 @@
     if (ar.blue) {
       tarjetas.push('<div class="tarjeta informal"><div class="nombre">Argentina — blue' +
         '<span class="etiqueta">informal</span></div>' +
-        '<div class="valor">' + num(ar.blue.promedio, DECIMALES.ars) +
+        '<div class="valor">' + cifra(ar.blue.promedio, DECIMALES.ars) +
           ' ' + delta(ar.blue.variacion, ar.blue.variacionDesde, ar.blue.variacionCompleta) + '</div>' +
         '<div class="unidad">pesos argentinos por dólar</div>' +
         '<div class="pie">' + (ar.fuente || '') + ' · sin fuente oficial' +
@@ -860,7 +866,7 @@
 
     if (ar.brecha !== null && ar.brecha !== undefined) {
       tarjetas.push('<div class="tarjeta"><div class="nombre">Brecha cambiaria</div>' +
-        '<div class="valor">' + num(ar.brecha, 1) + '%</div>' +
+        '<div class="valor">' + cifra(ar.brecha, 1) + '%</div>' +
         '<div class="unidad">blue sobre oficial — calculado</div>' +
         '<div class="pie">se calcula acá, no viene de ninguna fuente</div></div>');
     }
@@ -891,13 +897,13 @@
     var avisos = [];
     if (c.discrepaOficial) {
       avisos.push('<li><strong>Oficial:</strong> ' + ar.fuente + ' dice ' +
-        num(ar.oficial && ar.oficial.promedio, DECIMALES.ars) + ' y ' + c.fuente + ' dice ' +
-        num(c.oficial, DECIMALES.ars) + ' — ' + num(c.difOficial, 2) + '% de diferencia.</li>');
+        cifra(ar.oficial && ar.oficial.promedio, DECIMALES.ars) + ' y ' + c.fuente + ' dice ' +
+        cifra(c.oficial, DECIMALES.ars) + ' — ' + cifra(c.difOficial, 2) + '% de diferencia.</li>');
     }
     if (c.discrepaBlue) {
       avisos.push('<li><strong>Blue:</strong> ' + ar.fuente + ' dice ' +
-        num(ar.blue && ar.blue.promedio, DECIMALES.ars) + ' y ' + c.fuente + ' dice ' +
-        num(c.blue, DECIMALES.ars) + ' — ' + num(c.difBlue, 2) + '% de diferencia.</li>');
+        cifra(ar.blue && ar.blue.promedio, DECIMALES.ars) + ' y ' + c.fuente + ' dice ' +
+        cifra(c.blue, DECIMALES.ars) + ' — ' + cifra(c.difBlue, 2) + '% de diferencia.</li>');
     }
     document.getElementById('aviso-argentina').innerHTML = avisos.length
       ? '<div class="aviso"><strong>Las dos fuentes de Argentina no coinciden.</strong>' +
