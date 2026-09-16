@@ -8,10 +8,10 @@ on:
   workflow_dispatch:
     inputs:
       script:
-        description: "sondeo = las que están en producción · candidatos = las que se están evaluando"
+        description: "sondeo = fuentes en producción · candidatos = fuentes a evaluar · ver-foto = la corrida entera, de punta a punta"
         type: choice
         default: sondeo
-        options: [sondeo, candidatos]
+        options: [sondeo, candidatos, ver-foto]
 
 jobs:
   explorar:
