@@ -1,0 +1,16 @@
+# Corrida manual: sirve para mirar fuentes nuevas desde una IP con salida a
+# internet. No toca datos ni despliega nada; solo imprime lo que responden.
+name: Explorar fuentes
+
+on:
+  workflow_dispatch:
+
+jobs:
+  explorar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: node scripts/candidatos.mjs
