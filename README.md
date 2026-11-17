@@ -100,13 +100,25 @@ Dos cosas cambiaron a partir de eso:
 
 1. El banco rehízo su sitio y ahora sirve la tabla armada, así que se lee
    directo y se dejó de depender de un intermediario.
-2. **Donde la fuente trae una fecha, se exige que esté al día.** El sondeo falla
-   si la página del BROU no es de hoy o ayer, o si el dólar del BCU lleva más de
-   seis días sin publicarse. Y `reunirDatos` marca la pizarra como `viejo`
-   cuando la página está vieja: la tarjeta muestra el último valor publicado
-   pero dice en ámbar desde cuándo no se mueve, y ese punto **no entra a la
-   serie**, para que el histórico no se llene de un número repetido que haría
-   parecer que la pizarra estuvo quieta dos meses.
+2. **Se vigila que la fuente esté viva, no sólo que conteste.**
+
+La página del BROU **no sirve** para eso, aunque lo parezca. Muestra arriba
+«Martes 17 de Noviembre de 2026 · 09:23 AM», pero ese elemento
+(`<p id="date_paragraph">`) llega **vacío** y lo rellena JavaScript con el reloj
+del visitante. Comprobado pidiéndola con cuatro juegos de cabeceras distintos:
+en los cuatro llegó vacío, y no hay `Last-Modified`. Usarla como señal de
+frescura sería comparar nuestro reloj contra sí mismo y obtener «al día» para
+siempre, incluso con la fuente muerta. Peor que no tener guardia.
+
+La señal que sí existe es **nuestro propio histórico**: `diasSinMoverse` mide
+cuántos días hace que el número no cambia. Una pizarra bancaria quieta catorce
+días corridos no existe; el espejo que se murió estuvo 57 así. Cuando se pasa de
+ese umbral, la tarjeta deja de presentar el valor como dato del día y lo dice en
+ámbar. La lectura **se sigue guardando**: si la fuente se detuvo, la línea plana
+en el gráfico es justamente la prueba.
+
+Donde la fuente sí publica una fecha propia se exige que esté al día: el sondeo
+falla si el dólar del BCU lleva más de seis días sin publicarse.
 
 Una fuente que responde 200 y parsea bien puede estar muerta. Es el modo de
 falla que no se ve mirando el número, y es el que nos pasó.

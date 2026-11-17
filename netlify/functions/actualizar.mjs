@@ -2,7 +2,7 @@
 //
 // Las tareas programadas solo corren en deploys publicados: en previews y
 // ramas no se dispara.
-import { reunirDatos, puntoDe, tieneAlgo, aplicarVariaciones } from '../../lib/fuentes.mjs';
+import { reunirDatos, puntoDe, tieneAlgo, aplicarVariaciones, marcarEstancadas } from '../../lib/fuentes.mjs';
 import { fusionarHistoricos } from '../../lib/parseo.mjs';
 import { SEMILLA } from '../../lib/semilla.mjs';
 import { almacen, CLAVE_FOTO, CLAVE_SERIE, CLAVE_BITACORA } from '../../lib/almacen.mjs';
@@ -30,6 +30,11 @@ export default async (req) => {
 
     // contra el punto de hace 24 horas, buscado por serie sobre el histórico
     aplicarVariaciones(foto, punto, previa);
+
+    // Después de armar el punto, no antes: la lectura se guarda igual. Si la
+    // fuente se detuvo, la línea plana en el histórico es justamente la prueba;
+    // lo que cambia es que la tarjeta deja de presentarla como dato del día.
+    marcarEstancadas(foto, serie);
 
     await store.setJSON(CLAVE_SERIE, serie);
     await store.setJSON(CLAVE_FOTO, { ...foto, puntos: serie.length });

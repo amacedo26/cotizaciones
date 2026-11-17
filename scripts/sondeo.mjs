@@ -127,8 +127,9 @@ await revisar('BROU (pizarra del banco)', true, async () => {
   if (!ok) throw new Error(`HTTP ${estado}`);
   const r = interpretarPizarraBrou(cuerpo);
   if (r.estado !== 'ok') throw new Error(r.error);
-  exigirFresca('BROU', r.fechaPagina, 1);
-  return `${r.compra} / ${r.venta}  (página del ${r.fechaPagina})`;
+  // Acá no se puede exigir frescura: el banco no publica cuándo movió la
+  // pizarra. Esa guardia vive en la corrida programada, que tiene el histórico.
+  return `${r.compra} / ${r.venta}`;
 });
 
 await revisar('Brasil (fxratesapi)', true, async () => {

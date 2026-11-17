@@ -3,8 +3,8 @@
 //   node scripts/probar-parseo.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { aNumero, interpretarBevsa, interpretarBcu, interpretarPizarraBrou, fechaDePizarra,
-         diasDeDiferencia, interpretarSwissquote, interpretarDolarApi, interpretarBluelytics,
+import { aNumero, interpretarBevsa, interpretarBcu, interpretarPizarraBrou,
+         diasDeDiferencia, diasSinMoverse, interpretarSwissquote, interpretarDolarApi, interpretarBluelytics,
          calcularBrecha, calcularDxy, fusionarHistoricos, podar, contrastarArgentina,
          recortar, reducir, puntoDeReferencia,
          UI_MIN, UI_MAX, UR_MIN, UR_MAX } from '../lib/parseo.mjs';
@@ -192,7 +192,6 @@ test('BROU: lee la pizarra y no la cotización preferencial de eBROU', () => {
   assert.equal(r.compra, 39.4);          // eBROU sería 39,90
   assert.equal(r.venta, 41.8);           // eBROU sería 41,30
   assert.equal(r.promedio, 40.6);
-  assert.equal(r.fechaPagina, '2026-11-17');
 });
 
 test('BROU: el arbitraje no se confunde con la cotización', () => {
@@ -217,15 +216,18 @@ test('BROU: páginas rotas no revientan ni inventan un número', () => {
   assert.equal(interpretarPizarraBrou(absurdo).estado, 'revisar');
 });
 
-test('fechaDePizarra entiende las dos grafías de setiembre', () => {
-  assert.equal(fechaDePizarra('Lunes 21 de Setiembre de 2026 · 10:00 AM'), '2026-09-21');
-  assert.equal(fechaDePizarra('Lunes 21 de Septiembre de 2026 · 10:00 AM'), '2026-09-21');
-  assert.equal(fechaDePizarra('sin fecha'), null);
+// La página del BROU muestra una fecha, pero el elemento llega vacío y lo
+// rellena JavaScript con el reloj del visitante. Comprobado el 2026-11-17
+// pidiéndola con cuatro juegos de cabeceras: en las cuatro llegó vacío.
+// Usarla como señal de frescura sería comparar nuestro reloj contra sí mismo.
+test('BROU: la pizarra no promete una fecha que la página no da', () => {
+  const r = interpretarPizarraBrou(PIZARRA);
+  assert.equal(r.fechaPagina, undefined);
 });
 
 // La falla que nos pasó: el espejo se congeló el 2026-09-21 y siguió sirviendo
 // la misma foto durante 57 días. Nadie se dio cuenta mirando el número.
-test('diasDeDiferencia detecta una fuente que dejó de moverse', () => {
+test('diasDeDiferencia mide el atraso de una fuente que sí publica fecha', () => {
   const hoy = new Date('2026-11-17T12:00:00Z');
   assert.equal(diasDeDiferencia('2026-11-17', hoy), 0);
   assert.equal(diasDeDiferencia('2026-11-16', hoy), 1);
@@ -489,4 +491,25 @@ test('referencia: sin ningún valor devuelve null en vez de inventar uno', () =>
   assert.equal(puntoDeReferencia([], 'bcu', HACE_24H), null);
   assert.equal(puntoDeReferencia(DOS_DIAS, 'noExiste', HACE_24H), null);
   assert.equal(puntoDeReferencia(null, 'bcu', HACE_24H), null);
+});
+
+// El modo de falla que nos costó 57 días: la fuente responde, el número parsea,
+// y es siempre el mismo. Sin fecha de la fuente, el histórico es lo único que
+// lo delata.
+test('diasSinMoverse mide desde el último cambio, no desde la última lectura', () => {
+  const ahora = Date.parse('2026-11-17T12:00:00Z');
+  const dia = (d, v) => ({ t: `2026-${d}T12:00:00Z`, brouCompra: v });
+
+  // Se leyó todos los días, pero el valor es el mismo desde el 09-21.
+  const muerta = [dia('09-20', 38.50), dia('09-21', 38.85), dia('10-21', 38.85), dia('11-17', 38.85)];
+  assert.equal(diasSinMoverse(muerta, 'brouCompra', ahora), 57);
+
+  // Una fuente viva: cambió ayer.
+  const viva = [dia('11-14', 39.20), dia('11-16', 39.40), dia('11-17', 39.40)];
+  assert.equal(diasSinMoverse(viva, 'brouCompra', ahora), 1);
+
+  // Sin datos para esa clave no se puede afirmar nada.
+  assert.equal(diasSinMoverse(muerta, 'brouVenta', ahora), null);
+  assert.equal(diasSinMoverse([], 'brouCompra', ahora), null);
+  assert.equal(diasSinMoverse(null, 'brouCompra', ahora), null);
 });

@@ -796,10 +796,9 @@
       // durante 57 días con el espejo anterior y en pantalla no se notaba.
       '<div class="pie">' + (
         bk.estado === 'ok'
-          ? ((bk.fuente || '') + (bk.fecha ? ' · página del ' + reloj(bk.fecha) : ''))
+          ? ((bk.fuente || '') + (bk.leido ? ' · leído ' + reloj(bk.leido) : ''))
         : bk.estado === 'viejo'
-          ? ('<span class="viejo">' + (bk.error || 'la página del banco no se actualiza') +
-             '</span> — el valor de abajo es el último que publicó')
+          ? ('<span class="viejo">' + (bk.error || 'la fuente parece detenida') + '</span>')
           : ('<span class="viejo">no se pudo leer: ' + (bk.error || bk.estado) + '</span>')
       ) + '</div>';
 
