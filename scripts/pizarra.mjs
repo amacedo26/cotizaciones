@@ -1,177 +1,36 @@
 #!/usr/bin/env node
-// Dos preguntas sobre la pizarra del BROU, una exploratoria y una medida:
+// Qué HTML entrega realmente el BROU a un fetch pelado, que es lo que corre en
+// producción. Nació para contestar una pregunta concreta: la tabla se lee bien
+// pero la fecha de la página no aparece, y hay que ver si llega o no llega.
 //
-//   1. ¿Hay alguna fuente mejor que el espejo de dolarapi? Sobre todo: ¿alguna
-//      que diga cuándo movió el banco, y no cuándo la miró el espejo?
-//   2. ¿Cada cuánto cambia de verdad el sello de dolarapi? Con dos muestras
-//      parecía horario, pero dos muestras no son una cadencia.
-//
-//   node scripts/pizarra.mjs            → solo la parte 1
-//   MINUTOS=70 node scripts/pizarra.mjs → además mide 70 minutos, cada 2
-//
-// Nunca falla: es exploratorio.
+//   node scripts/pizarra.mjs
+import { interpretarPizarraBrou, fechaDePizarra } from '../lib/parseo.mjs';
 
+const URL_BROU = 'https://www.brou.com.uy/cotizaciones';
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
 
-async function traer(url, opciones = {}) {
+const INTENTOS = [
+  ['tal cual lo pide producción', { 'User-Agent': UA }],
+  ['con Accept-Language es-UY', { 'User-Agent': UA, 'Accept-Language': 'es-UY,es;q=0.9' }],
+  ['con Accept de navegador', { 'User-Agent': UA, Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8', 'Accept-Language': 'es-UY,es;q=0.9' }],
+  ['sin User-Agent', {}],
+];
+
+for (const [etiqueta, headers] of INTENTOS) {
   try {
-    const r = await fetch(url, {
-      signal: AbortSignal.timeout(20000),
-      headers: { 'User-Agent': UA, ...(opciones.headers || {}) },
-      ...opciones,
-    });
-    return { ok: r.ok, estado: r.status, tipo: (r.headers.get('content-type') || '?').split(';')[0], cuerpo: await r.text() };
+    const r = await fetch(URL_BROU, { headers, signal: AbortSignal.timeout(20000) });
+    const html = await r.text();
+    const leido = interpretarPizarraBrou(html);
+    console.log(`\n[${etiqueta}] ${r.status} ${(r.headers.get('content-type') || '?').split(';')[0]} · ${html.length} bytes`);
+    console.log(`  last-modified: ${r.headers.get('last-modified') || '—'} · date: ${r.headers.get('date') || '—'}`);
+    console.log(`  cotización: ${leido.estado === 'ok' ? `${leido.compra} / ${leido.venta}` : leido.error}`);
+    console.log(`  ¿está date_paragraph?  ${html.includes('date_paragraph')}`);
+    console.log(`  ¿está "de Noviembre de"? ${html.includes('de Noviembre de')}`);
+    console.log(`  fechaDePizarra: ${fechaDePizarra(html)}`);
+    const i = html.indexOf('date_paragraph');
+    if (i >= 0) console.log('  contexto: ' + html.slice(i, i + 110).replace(/\s+/g, ' '));
   } catch (e) {
-    return { ok: false, estado: 0, tipo: 'excepción', cuerpo: e.message };
+    console.log(`\n[${etiqueta}] EXCEPCIÓN: ${e.message}`);
   }
 }
-
-async function probar(etiqueta, url, largo = 260, opciones) {
-  const r = await traer(url, opciones);
-  console.log(`\n[${etiqueta}] ${r.estado} ${r.tipo}`);
-  console.log('  ' + r.cuerpo.replace(/\s+/g, ' ').slice(0, largo));
-  return r;
-}
-
-console.log('=== 1. ¿De dónde saca el portal del BROU sus números? ===');
-// Si la tabla la arma el navegador, el número tiene que venir de algún pedido
-// que hace la página. Ese pedido es el que interesa: sería la fuente directa.
-const portal = await traer('https://www.brou.com.uy/cotizaciones');
-console.log(`\n[portal] ${r_(portal)} — ${portal.cuerpo.length} bytes`);
-function r_(x) { return `${x.estado} ${x.tipo}`; }
-
-if (portal.cuerpo) {
-  const html = portal.cuerpo;
-  const unicos = (lista) => [...new Set(lista)];
-
-  const scripts = unicos([...html.matchAll(/<script[^>]+src="([^"]+)"/g)].map((m) => m[1]))
-    .filter((u) => !/jquery|polyfill|analytics|gtm|gtag|recaptcha/i.test(u));
-  console.log(`\n  scripts propios (${scripts.length}):`);
-  scripts.slice(0, 25).forEach((u) => console.log('    ' + u));
-
-  const pistas = unicos([...html.matchAll(/[^"'\s(]*(?:\/api\/|\.json|render_portlet|p_p_resource_id|invoke|cotizacion)[^"'\s)]*/gi)].map((m) => m[0]))
-    .filter((u) => u.length > 8 && u.length < 220);
-  console.log(`\n  cadenas que huelen a endpoint (${pistas.length}):`);
-  pistas.slice(0, 30).forEach((u) => console.log('    ' + u));
-
-  console.log('\n  ¿usa Liferay.Service / AUI io?', /Liferay\.Service|AUI\(\)\.use|\.io\.request/.test(html));
-  console.log('  ¿hay un portlet de cotizaciones?', /cotizacion/i.test(html));
-}
-
-// Si algún script propio trae la URL adentro, aparece acá.
-console.log('\n--- adentro de los scripts propios ---');
-const html0 = portal.cuerpo || '';
-const propios = [...new Set([...html0.matchAll(/<script[^>]+src="([^"]+)"/g)].map((m) => m[1]))]
-  .filter((u) => /brou/i.test(u) && /\.js/i.test(u)).slice(0, 6);
-for (const ruta of propios) {
-  const url = ruta.startsWith('http') ? ruta : 'https://www.brou.com.uy' + ruta;
-  const js = await traer(url);
-  if (!js.ok) { console.log(`  [${ruta}] ${r_(js)}`); continue; }
-  const urls = [...new Set([...js.cuerpo.matchAll(/["'`](\/[^"'`\s]*(?:cotiza|api|json)[^"'`\s]*)["'`]/gi)].map((m) => m[1]))];
-  console.log(`  [${ruta}] ${js.cuerpo.length} bytes · candidatos: ${urls.slice(0, 10).join(' , ') || 'ninguno'}`);
-}
-
-console.log('\n\n=== 1b. El portlet de cotizaciones, atacado de frente ===');
-// El portal es Liferay y la tabla vive en un portlet identificado en el HTML.
-// Liferay sabe servir un portlet solo, sin la página alrededor: si eso
-// funciona, el número sale del banco y no de un espejo.
-const PORTLET = 'cotizacionfull_WAR_broutmfportlet_INSTANCE_otHfewh1klyS';
-const BASE = 'https://www.brou.com.uy/cotizaciones';
-
-function cuantosNumeros(texto) {
-  const cerca = [...texto.matchAll(/[Dd][óo]lar[\s\S]{0,400}?(\d{1,3}[.,]\d{2})/g)].map((m) => m[1]);
-  const sueltos = [...texto.matchAll(/\b(3\d|4\d)[.,]\d{2}\b/g)].map((m) => m[0]);
-  return { cerca: [...new Set(cerca)], plausibles: [...new Set(sueltos)] };
-}
-
-for (const [etiqueta, extra] of [
-  ['exclusive',       `p_p_id=${PORTLET}&p_p_lifecycle=0&p_p_state=exclusive&p_p_mode=view`],
-  ['isolated',        `p_p_id=${PORTLET}&p_p_lifecycle=0&p_p_state=normal&p_p_mode=view&p_p_isolated=1`],
-  ['resource',        `p_p_id=${PORTLET}&p_p_lifecycle=2&p_p_state=normal&p_p_mode=view`],
-  ['resource+json',   `p_p_id=${PORTLET}&p_p_lifecycle=2&p_p_state=exclusive&p_p_mode=view&p_p_resource_id=cotizaciones`],
-]) {
-  const r = await traer(`${BASE}?${extra}`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
-  const n = cuantosNumeros(r.cuerpo || '');
-  console.log(`\n[portlet ${etiqueta}] ${r.estado} ${r.tipo} — ${(r.cuerpo || '').length} bytes`);
-  console.log(`  cerca de "Dólar": ${n.cerca.join(' | ') || 'ninguno'}`);
-  console.log(`  números 30–49 con dos decimales: ${n.plausibles.slice(0, 12).join(' | ') || 'ninguno'}`);
-  if (n.cerca.length || n.plausibles.length) {
-    console.log('  ' + (r.cuerpo || '').replace(/\s+/g, ' ').slice(0, 500));
-  }
-}
-
-// El JS propio del portlet es donde estaría la URL que pide los datos.
-console.log('\n--- brou-tmf-portlets.js ---');
-const tmf = await traer('https://www.brou.com.uy/brou-tmf-portlet/js/brou-tmf-portlets.js');
-if (tmf.ok) {
-  const urls = [...new Set([...tmf.cuerpo.matchAll(/["'`]([^"'`\s]*(?:cotiza|resource_id|lifecycle|\/api\/|\.json)[^"'`\s]*)["'`]/gi)].map((m) => m[1]))];
-  console.log(`  ${tmf.cuerpo.length} bytes · ${urls.length} candidatos`);
-  urls.slice(0, 25).forEach((u) => console.log('    ' + u));
-} else {
-  console.log(`  ${tmf.estado} ${tmf.tipo}`);
-}
-
-// cotizaciones.com.uy es una app JS: su API estaría en el bundle.
-console.log('\n--- cotizaciones.com.uy: buscando su API ---');
-const cuy = await traer('https://cotizaciones.com.uy/');
-if (cuy.ok) {
-  const bundles = [...new Set([...cuy.cuerpo.matchAll(/<script[^>]+src="([^"]+)"/g)].map((m) => m[1]))];
-  console.log('  bundles: ' + (bundles.join(' , ') || 'ninguno'));
-  for (const b of bundles.slice(0, 3)) {
-    const url = b.startsWith('http') ? b : 'https://cotizaciones.com.uy' + (b.startsWith('/') ? b : '/' + b);
-    const js = await traer(url);
-    if (!js.ok) { console.log(`  [${b}] ${js.estado}`); continue; }
-    const apis = [...new Set([...js.cuerpo.matchAll(/https?:\/\/[a-z0-9.\-]+\/[^"'`\s]{0,80}/gi)].map((m) => m[0]))]
-      .filter((u) => /api|cotiza|json|firebase|supabase/i.test(u));
-    console.log(`  [${b}] ${js.cuerpo.length} bytes · ${apis.slice(0, 10).join(' , ') || 'sin candidatos'}`);
-  }
-}
-
-console.log('\n\n=== 2. Otros espejos y APIs de cotizaciones uruguayas ===');
-await probar('dolarapi uy (raíz)', 'https://uy.dolarapi.com/', 200);
-await probar('dolarapi docs', 'https://docs.dolarapi.com/', 200);
-await probar('dolarapi uy /v1/cotizaciones/usd', 'https://uy.dolarapi.com/v1/cotizaciones/usd', 200);
-await probar('cotizaciones.com.uy', 'https://cotizaciones.com.uy/', 160);
-await probar('cambio.uy', 'https://cambio.uy/', 160);
-await probar('dolar.uy', 'https://dolar.uy/', 160);
-await probar('preciodolar (uy)', 'https://api.preciodolar.com/uy', 160);
-await probar('ebrou', 'https://www.ebrou.com.uy/', 160);
-// El BCU publica su propia pizarra de bancos: si existe, es oficial y fechada.
-await probar('BCU arbitrajes/pizarra', 'https://www.bcu.gub.uy/Estadisticas-e-Indicadores/Paginas/Cotizaciones.aspx', 200);
-
-console.log('\n\n=== 3. ¿Cada cuánto cambia el sello de dolarapi? ===');
-const minutos = Number(process.env.MINUTOS || 0);
-if (!minutos) {
-  console.log('  (MINUTOS no está puesto: no se mide. Correr con MINUTOS=70 para medirlo.)');
-} else {
-  const cada = 2 * 60_000;
-  const hasta = Date.now() + minutos * 60_000;
-  let selloPrevio = null, valorPrevio = null;
-  console.log(`  midiendo ${minutos} minutos, una lectura cada 2\n`);
-  console.log('  lectura (UTC)     compra / venta    fechaActualizacion        ¿cambió?');
-  while (Date.now() < hasta) {
-    const r = await traer('https://uy.dolarapi.com/v1/cotizaciones', { headers: { Accept: 'application/json' } });
-    const ahora = new Date().toISOString().slice(11, 19);
-    let linea;
-    try {
-      const usd = JSON.parse(r.cuerpo).find((f) => f.moneda === 'USD');
-      const valor = `${usd.compra} / ${usd.venta}`;
-      const sello = usd.fechaActualizacion;
-      const cambios = [];
-      if (selloPrevio !== null && sello !== selloPrevio) cambios.push('SELLO');
-      if (valorPrevio !== null && valor !== valorPrevio) cambios.push('VALOR');
-      linea = `  ${ahora}   ${valor.padEnd(16)}  ${sello}  ${cambios.join(' + ') || '—'}`;
-      selloPrevio = sello; valorPrevio = valor;
-    } catch (e) {
-      linea = `  ${ahora}   ERROR ${r.estado} ${String(r.cuerpo).slice(0, 60)}`;
-    }
-    console.log(linea);
-    if (Date.now() + cada < hasta) await new Promise((r) => setTimeout(r, cada));
-    else break;
-  }
-  console.log('\n  Leer la columna "¿cambió?": si SELLO aparece siempre al mismo minuto');
-  console.log('  de cada hora, el espejo se refresca por reloj. Si VALOR nunca aparece,');
-  console.log('  es que el banco no movió la pizarra en la ventana medida.');
-}
-
 console.log('\nListo.');
