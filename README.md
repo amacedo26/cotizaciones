@@ -123,6 +123,49 @@ falla si el dólar del BCU lleva más de seis días sin publicarse.
 Una fuente que responde 200 y parsea bien puede estar muerta. Es el modo de
 falla que no se ve mirando el número, y es el que nos pasó.
 
+### El tramo que quedó sucio, y cómo se limpió
+
+Mientras el espejo estuvo detenido, el tablero siguió guardando un punto cada
+diez minutos. La serie quedó con **8.171 puntos** entre el `2026-09-21` y el
+`2026-11-17` que no son mediciones de la pizarra sino copias del mismo par,
+38,85 / 41,25. En el gráfico se veían como una línea perfectamente plana de dos
+meses.
+
+`limpiarTramoFalso` los anula. Tres decisiones que vale la pena dejar escritas:
+
+- **Anula el valor, no borra el punto.** Esos mismos puntos tienen mediciones
+  buenas de oro, del dólar del BCU, de Brasil y de Argentina. Se pierde el
+  BROU y queda todo lo demás; el gráfico dibuja el hueco porque ya sabe cortar
+  la línea en los nulos.
+- **El corte es el último refresco real del espejo**, las 21:01:08 del 21/09, y
+  no la fecha en que se notó. Hasta esa marca el espejo sí había mirado la
+  pizarra, así que los seis puntos anteriores son mediciones buenas y se
+  conservan.
+- **Exige que el valor sea exactamente el congelado**, para no barrer de paso
+  una coincidencia legítima.
+
+Corre dentro de la función programada, que es la única que escribe la serie, y
+es idempotente: la primera pasada anuló los 8.171 y las siguientes no encuentran
+nada. Se puede borrar la función y su llamada cuando la serie ya no la necesite.
+
+### La segunda opinión sobre la UI
+
+La UI la calcula el INE y la republican dos fuentes que ya consultamos: el BCU
+por su servicio, y el BROU en la misma tabla de la que sale el dólar. Deberían
+dar el número idéntico, así que el umbral es estrecho (0,1 %): no es un
+relevamiento, es un valor publicado.
+
+El contraste no cuesta un pedido más y es exactamente la guardia que al dólar
+del BROU le faltó durante 57 días. Se muestra con el mismo criterio que el de
+Argentina: en silencio cuando coinciden, a la vista cuando no.
+
+Un detalle del parser que vale un comentario: la fila de la UI trae **sólo
+venta**, con la compra en `-`. Por eso `celdasDe` **no filtra los nulos**: si lo
+hiciera, la venta se correría al lugar de la compra y el número saldría mal sin
+avisar. Hay una prueba que fija justamente eso.
+
+La **UR no tiene segunda fuente**: el BROU no la publica en su pizarra.
+
 La **UI** y la **UR** las calcula el INE, pero el INE no publica ningún endpoint
 consultable (su sitio ni siquiera resuelve desde un runner). El BCU las
 republica en el mismo servicio SOAP que las monedas, con los códigos 9800 y

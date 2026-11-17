@@ -3,7 +3,7 @@
 // Las tareas programadas solo corren en deploys publicados: en previews y
 // ramas no se dispara.
 import { reunirDatos, puntoDe, tieneAlgo, aplicarVariaciones, marcarEstancadas } from '../../lib/fuentes.mjs';
-import { fusionarHistoricos } from '../../lib/parseo.mjs';
+import { fusionarHistoricos, limpiarTramoFalso } from '../../lib/parseo.mjs';
 import { SEMILLA } from '../../lib/semilla.mjs';
 import { almacen, CLAVE_FOTO, CLAVE_SERIE, CLAVE_BITACORA } from '../../lib/almacen.mjs';
 
@@ -24,9 +24,16 @@ export default async (req) => {
     const previa = fusionarHistoricos(SEMILLA, guardada);
     // Una corrida donde no respondió nadie no merece un punto: dejaría un hueco
     // de nulls en el medio de la serie, que es peor que no tener el punto.
-    const serie = tieneAlgo(punto)
+    const crecida = tieneAlgo(punto)
       ? fusionarHistoricos(previa, [punto])
       : previa;
+
+    // Borra el tramo que dejó el espejo muerto. Va acá y no en un script aparte
+    // porque la serie vive en el almacén y ésta es la única corrida que lo
+    // escribe. Es idempotente: la primera pasada anula los 8.171 puntos y las
+    // siguientes no encuentran nada. Se puede sacar cuando ya no toque nada.
+    const { serie, tocados } = limpiarTramoFalso(crecida);
+    if (tocados) console.log(`! reparación: ${tocados} puntos del BROU anulados`);
 
     // contra el punto de hace 24 horas, buscado por serie sobre el histórico
     aplicarVariaciones(foto, punto, previa);
@@ -43,6 +50,7 @@ export default async (req) => {
       cuando: new Date().toISOString(),
       ok: true,
       duracionMs: Date.now() - arranque,
+      ...(tocados ? { reparados: tocados } : {}),
       puntos: serie.length,
       agregado: serie.length > previa.length,
       incidencias: foto.incidencias,

@@ -4,7 +4,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { aNumero, interpretarBevsa, interpretarBcu, interpretarPizarraBrou,
-         diasDeDiferencia, diasSinMoverse, interpretarSwissquote, interpretarDolarApi, interpretarBluelytics,
+         diasDeDiferencia, diasSinMoverse, limpiarTramoFalso, TRAMO_ESPEJO_MUERTO,
+         contrastarUi,
+         interpretarSwissquote, interpretarDolarApi, interpretarBluelytics,
          calcularBrecha, calcularDxy, fusionarHistoricos, podar, contrastarArgentina,
          recortar, reducir, puntoDeReferencia,
          UI_MIN, UI_MAX, UR_MIN, UR_MAX } from '../lib/parseo.mjs';
@@ -183,6 +185,7 @@ const PIZARRA = `<div>Martes 17 de Noviembre de 2026 &middot; 09:22 AM</div>
     ${fila('Dólar', '39,40000', '41,80000')}
     ${fila('Dólar eBROU', '39,90000', '41,30000')}
     ${fila('Euro', '42,45000', '47,10000')}
+    ${fila('Unidad Indexada', '-', '6,70540')}
   </tbody>
 </table></div>`;
 
@@ -512,4 +515,71 @@ test('diasSinMoverse mide desde el último cambio, no desde la última lectura',
   assert.equal(diasSinMoverse(muerta, 'brouVenta', ahora), null);
   assert.equal(diasSinMoverse([], 'brouCompra', ahora), null);
   assert.equal(diasSinMoverse(null, 'brouCompra', ahora), null);
+});
+
+// La serie quedó con 8.171 puntos copiados de una fuente detenida. Lo que se
+// borra es el valor, no el punto: esos mismos puntos tienen mediciones buenas
+// de oro, dólar del BCU y los demás.
+test('limpiarTramoFalso anula sólo el BROU del tramo muerto', () => {
+  const punto = (t, compra, venta) => ({ t, oro: 4300, bcu: 40.2, brouCompra: compra, brouVenta: venta });
+  const serie = [
+    punto('2026-09-21T20:10:00.000Z', 38.85, 41.25),  // antes del último sello: real
+    punto('2026-09-21T21:00:00.000Z', 38.85, 41.25),  // antes del último sello: real
+    punto('2026-09-21T21:10:00.000Z', 38.85, 41.25),  // ya es copia
+    punto('2026-10-15T10:00:00.000Z', 38.85, 41.25),  // copia
+    punto('2026-11-17T14:30:27.575Z', 39.4, 41.8),    // lectura directa del banco
+  ];
+  const { serie: limpia, tocados } = limpiarTramoFalso(serie);
+
+  assert.equal(tocados, 2);
+  assert.equal(limpia.length, 5);                       // no se borra ningún punto
+  assert.equal(limpia[0].brouCompra, 38.85);            // el espejo todavía miraba
+  assert.equal(limpia[1].brouCompra, 38.85);
+  assert.equal(limpia[2].brouCompra, null);
+  assert.equal(limpia[3].brouVenta, null);
+  assert.equal(limpia[4].brouCompra, 39.4);             // la lectura buena queda
+  assert.ok(limpia.every((p) => p.oro === 4300 && p.bcu === 40.2));  // lo demás intacto
+});
+
+test('limpiarTramoFalso no barre un valor que coincide por casualidad fuera del tramo', () => {
+  const fuera = [{ t: '2027-03-01T10:00:00.000Z', brouCompra: TRAMO_ESPEJO_MUERTO.compra,
+                   brouVenta: TRAMO_ESPEJO_MUERTO.venta }];
+  assert.equal(limpiarTramoFalso(fuera).tocados, 0);
+});
+
+test('limpiarTramoFalso se puede correr mil veces: la segunda no toca nada', () => {
+  const serie = [{ t: '2026-10-15T10:00:00.000Z', brouCompra: 38.85, brouVenta: 41.25 }];
+  const una = limpiarTramoFalso(serie);
+  assert.equal(una.tocados, 1);
+  assert.equal(limpiarTramoFalso(una.serie).tocados, 0);
+});
+
+// La UI la publican el BCU y el BROU, y deberían dar el mismo número: las dos
+// republican el del INE. Es la segunda opinión que al dólar del BROU le faltó
+// durante 57 días, y sale gratis porque viene en la tabla que ya pedimos.
+test('BROU: lee la UI de la misma tabla, que trae sólo venta', () => {
+  const r = interpretarPizarraBrou(PIZARRA);
+  assert.equal(r.ui, 6.7054);
+});
+
+test('BROU: una punta vacía no corre la venta al lugar de la compra', () => {
+  // La fila de la UI tiene la compra en "-". Si se filtraran los nulos, la
+  // venta pasaría a leerse como compra y el número saldría mal sin avisar.
+  const r = interpretarPizarraBrou(PIZARRA);
+  assert.notEqual(r.ui, 1);          // 1,00000 es el arbitraje
+  assert.equal(r.compra, 39.4);      // el dólar sigue leyéndose bien
+});
+
+test('contrastarUi calla cuando coinciden y habla cuando no', () => {
+  const igual = contrastarUi(6.7054, 6.7054);
+  assert.equal(igual.estado, 'ok');
+  assert.equal(igual.discrepa, false);
+
+  const distinto = contrastarUi(6.7054, 6.9);
+  assert.equal(distinto.discrepa, true);
+  assert.equal(distinto.valor, 6.9);
+
+  // Sin una de las dos no se puede contrastar, y eso no es una discrepancia.
+  assert.equal(contrastarUi(6.7054, null).estado, 'sin contraste');
+  assert.equal(contrastarUi(null, 6.7054).estado, 'sin contraste');
 });

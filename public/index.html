@@ -176,6 +176,7 @@
 
   <h2>Unidades de cuenta</h2>
   <div class="rejilla" id="rejilla-unidades"></div>
+  <div id="aviso-unidades"></div>
   <p class="nota" id="nota-unidades"></p>
 
   <h2>Evolución</h2>
@@ -824,9 +825,21 @@
           : ('<span class="viejo">no se pudo leer: ' + (d.error || d.estado) + '</span>')) +
         '</div></div>';
     }).join('');
+    // El contraste con la pizarra del BROU: en silencio cuando coinciden, a la
+    // vista cuando no. Mismo criterio que el de Argentina.
+    var cUi = (un.ui && un.ui.contraste) || {};
     document.getElementById('nota-unidades').textContent =
       'Las calcula el INE. Acá se leen del servicio de cotizaciones del Banco Central, ' +
-      'que las republica.';
+      'que las republica.' +
+      (cUi.estado === 'ok' && !cUi.discrepa ? ' La UI está contrastada con ' + cUi.fuente + ': coinciden.' : '');
+    document.getElementById('aviso-unidades').innerHTML = cUi.discrepa
+      ? '<div class="aviso"><strong>Las dos fuentes de la UI no coinciden.</strong>' +
+        '<ul><li>El Banco Central dice ' + cifra(un.ui.valor, DECIMALES.ui) +
+        ' y ' + cUi.fuente + ' dice ' + cifra(cUi.valor, DECIMALES.ui) +
+        ' — ' + cifra(cUi.diferencia, 2) + '% de diferencia.</li></ul>' +
+        'Las dos republican el mismo número del INE, así que deberían dar igual. ' +
+        'Conviene verificar antes de usarlo.</div>'
+      : '';
 
     ultimoHistorico = hist;
     pintarGrafico(hist);
