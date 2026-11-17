@@ -437,6 +437,16 @@
     } catch (e) { return ''; }
   }
 
+  // Cuánto dura un lapso, en la unidad en que se entiende. No es lo mismo que
+  // hace(): aquello mide contra ahora, esto mide un tramo cualquiera.
+  function duracion(ms) {
+    var min = Math.round(ms / 60000);
+    if (min < 60) return min + (min === 1 ? ' minuto' : ' minutos');
+    var h = Math.round(min / 60);
+    if (h < 48) return h + (h === 1 ? ' hora' : ' horas');
+    return Math.round(h / 24) + ' días';
+  }
+
   // Un punto de una serie diaria no tiene hora que valga la pena mostrar: la
   // medición fue a las 14:03 pero el valor es el del día entero.
   function cuandoDe(ms, diaria) {
@@ -615,6 +625,23 @@
     var cambio = medidos[0].v ? ((ult.v - medidos[0].v) / medidos[0].v) * 100 : null;
     var conteo = (ultimaFoto && ultimaFoto.puntos) || {};
     var huecos = corte.tramos.length - 1;
+    // "1 hueco sin medición" no distingue entre datos que se cortaron y nunca
+    // volvieron y datos que volvieron hace un rato. Son cosas muy distintas y
+    // es lo primero que uno quiere saber al ver la línea partida, así que el
+    // pie declara cuánto dura el hueco y cuándo se reanuda.
+    var mayor = null;
+    for (var g = 0; g < corte.tramos.length - 1; g++) {
+      var fin = corte.tramos[g][corte.tramos[g].length - 1].t;
+      var sigue = corte.tramos[g + 1][0].t;
+      if (!mayor || sigue - fin > mayor.ms) mayor = { ms: sigue - fin, reanuda: sigue };
+    }
+    var notaHueco = '';
+    if (huecos === 1) {
+      notaHueco = ' · 1 hueco de ' + duracion(mayor.ms) + ', reanuda ' + cuandoDe(mayor.reanuda, def.diaria);
+    } else if (huecos > 1) {
+      notaHueco = ' · ' + huecos + ' huecos sin medición; el mayor, de ' + duracion(mayor.ms) +
+                  ', reanuda ' + cuandoDe(mayor.reanuda, def.diaria);
+    }
     var unidadConteo = def.diaria
       ? (medidos.length === 1 ? ' día' : ' días')
       : (medidos.length === 1 ? ' registro' : ' registros');
@@ -626,9 +653,7 @@
         ? ' · muestra de ' + conteo.enRango + ' mediciones'
         : '') +
       // Una línea cortada sin explicación desconcierta; con ella, informa.
-      (huecos > 0
-        ? ' · ' + huecos + (huecos === 1 ? ' hueco sin medición' : ' huecos sin medición')
-        : '');
+      notaHueco;
 
     dibujarTabla(puntos, def);
   }

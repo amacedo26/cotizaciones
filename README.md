@@ -239,8 +239,12 @@ una serie reducida los puntos están naturalmente más separados y un umbral fij
 cortaría en todos lados.
 
 Una medición aislada entre dos huecos se dibuja como un punto, porque como
-segmento de línea sería invisible. El pie declara cuántos huecos hay: una línea
-cortada sin explicación desconcierta, con explicación informa. Y la tabla
+segmento de línea sería invisible. El pie declara **cuánto dura el hueco y
+cuándo se reanuda**, no sólo que existe: «1 hueco sin medición» no distingue
+entre datos que se cortaron y nunca volvieron y datos que volvieron hace un
+rato, y es lo primero que uno quiere saber al ver la línea partida. Con varios
+huecos declara el mayor. Una línea cortada sin explicación desconcierta, con
+explicación informa. Y la tabla
 muestra «sin dato» en esas filas en vez de saltearlas.
 
 Los decimales del eje salen del paso entre marcas, no de la serie: con un paso de
