@@ -3,9 +3,10 @@
 //   node scripts/probar-parseo.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { aNumero, interpretarBevsa, interpretarBcu, interpretarBrou, interpretarSwissquote,
-         interpretarDolarApi, interpretarBluelytics, calcularBrecha, calcularDxy,
-         fusionarHistoricos, podar, contrastarArgentina, recortar, reducir, puntoDeReferencia,
+import { aNumero, interpretarBevsa, interpretarBcu, interpretarPizarraBrou, fechaDePizarra,
+         diasDeDiferencia, interpretarSwissquote, interpretarDolarApi, interpretarBluelytics,
+         calcularBrecha, calcularDxy, fusionarHistoricos, podar, contrastarArgentina,
+         recortar, reducir, puntoDeReferencia,
          UI_MIN, UI_MAX, UR_MIN, UR_MAX } from '../lib/parseo.mjs';
 
 test('aNumero entiende los formatos de número que puede mandar el endpoint', () => {
@@ -152,35 +153,85 @@ test('UI y UR: con la banda del dólar las dos quedarían marcadas para revisar'
   assert.equal(interpretarBcu(soapUnidad(9900, 'UNIDAD REAJUSTAB', 'U.R.', '1923.440000')).estado, 'revisar');
 });
 
-// Forma real de uy.dolarapi.com/v1/cotizaciones, registrada el 2026-09-16.
-const BROU = [
-  { moneda: 'USD', nombre: 'Dólar', compra: 39.05, venta: 41.25, fechaActualizacion: '2026-09-16T16:01:21.218Z' },
-  { moneda: 'EUR', nombre: 'Euro', compra: 44.15, venta: 48.77, fechaActualizacion: '2026-09-16T16:01:21.219Z' },
-  { moneda: 'BRL', nombre: 'Real', compra: 6.85, venta: 8.55, fechaActualizacion: '2026-09-16T16:01:21.219Z' },
-];
+// Markup real de www.brou.com.uy/cotizaciones, registrado el 2026-11-17.
+// El banco rehízo el sitio: la tabla ahora viene servida y se puede leer sin
+// navegador. Se conservan dos filas a propósito, porque el riesgo está en
+// confundirlas: "Dólar" es la pizarra y "Dólar eBROU" es otra cotización.
+const fila = (moneda, compra, venta) => `
+  <tr>
+    <td><div class="linea"><div class="bandera"><img src="x"></div>
+      <p class="moneda">${moneda}</p></div></td>
+    <td>&nbsp;&nbsp;</td>
+    <td><div class="linea"><p class="valor">${compra}</p></div></td>
+    <td><div class="linea"><p class="valor1"></p></div></td>
+    <td><div class="linea"><p class="valor">${venta}</p></div></td>
+    <td><div class="linea"><p class="valor1"></p></div></td>
+    <td><div class="linea"><p class="valor">1,00000</p></div></td>
+    <td><div class="linea"><p class="valor1"></p></div></td>
+    <td><div class="linea"><p class="valor">1,00000</p></div></td>
+  </tr>`;
 
-test('BROU: toma el dólar y no la primera fila que encuentre', () => {
-  const r = interpretarBrou(BROU);
+const PIZARRA = `<div>Martes 17 de Noviembre de 2026 &middot; 09:22 AM</div>
+<div class="cotizacion-portlet"><table>
+  <thead><tr>
+    <td></td><td>&nbsp;&nbsp;</td>
+    <td><div class="linea"><p class="valor">Compra</p></div></td>
+    <td><div class="linea"><p class="valor1"></p></div></td>
+    <td><div class="linea"><p class="valor">Venta</p></div></td>
+  </tr></thead>
+  <tbody>
+    ${fila('Dólar', '39,40000', '41,80000')}
+    ${fila('Dólar eBROU', '39,90000', '41,30000')}
+    ${fila('Euro', '42,45000', '47,10000')}
+  </tbody>
+</table></div>`;
+
+test('BROU: lee la pizarra y no la cotización preferencial de eBROU', () => {
+  const r = interpretarPizarraBrou(PIZARRA);
   assert.equal(r.estado, 'ok');
-  assert.equal(r.compra, 39.05);
-  assert.equal(r.venta, 41.25);
-  assert.equal(r.promedio, 40.15);   // punto medio de una pizarra con 2,20 de spread
-  assert.equal(r.fecha, '2026-09-16T16:01:21.218Z');
+  assert.equal(r.compra, 39.4);          // eBROU sería 39,90
+  assert.equal(r.venta, 41.8);           // eBROU sería 41,30
+  assert.equal(r.promedio, 40.6);
+  assert.equal(r.fechaPagina, '2026-11-17');
 });
 
-test('BROU: el real es más barato que el dólar y no debe confundirse con él', () => {
-  // Sin el filtro por moneda, la primera fila de otra lista podría colarse.
-  const soloReal = BROU.filter((f) => f.moneda === 'BRL');
-  assert.equal(interpretarBrou(soloReal).estado, 'error');
+test('BROU: el arbitraje no se confunde con la cotización', () => {
+  // Las dos columnas de arbitraje valen 1,00000 para el dólar. Si el parser
+  // tomara las celdas equivocadas, compra o venta darían 1.
+  const r = interpretarPizarraBrou(PIZARRA);
+  assert.ok(r.compra > 20 && r.venta > 20);
 });
 
-test('BROU: respuestas rotas no revientan ni inventan un número', () => {
-  assert.equal(interpretarBrou(null).estado, 'error');
-  assert.equal(interpretarBrou({}).estado, 'error');
-  assert.equal(interpretarBrou([]).estado, 'error');
-  assert.equal(interpretarBrou([{ moneda: 'USD', compra: null, venta: null }]).estado, 'error');
+test('BROU: el encabezado no se lee como si fuera una fila', () => {
+  // La cabecera también tiene <p class="valor">, pero no tiene moneda.
+  const soloEncabezado = PIZARRA.replace(fila('Dólar', '39,40000', '41,80000'), '');
+  assert.equal(interpretarPizarraBrou(soloEncabezado).estado, 'error');
+});
+
+test('BROU: páginas rotas no revientan ni inventan un número', () => {
+  assert.equal(interpretarPizarraBrou(null).estado, 'error');
+  assert.equal(interpretarPizarraBrou('').estado, 'error');
+  assert.equal(interpretarPizarraBrou('<html>mantenimiento</html>').estado, 'error');
   // Un valor imposible se marca, no se publica.
-  assert.equal(interpretarBrou([{ moneda: 'USD', compra: 3905, venta: 4125 }]).estado, 'revisar');
+  const absurdo = PIZARRA.replace('39,40000', '3940,00000');
+  assert.equal(interpretarPizarraBrou(absurdo).estado, 'revisar');
+});
+
+test('fechaDePizarra entiende las dos grafías de setiembre', () => {
+  assert.equal(fechaDePizarra('Lunes 21 de Setiembre de 2026 · 10:00 AM'), '2026-09-21');
+  assert.equal(fechaDePizarra('Lunes 21 de Septiembre de 2026 · 10:00 AM'), '2026-09-21');
+  assert.equal(fechaDePizarra('sin fecha'), null);
+});
+
+// La falla que nos pasó: el espejo se congeló el 2026-09-21 y siguió sirviendo
+// la misma foto durante 57 días. Nadie se dio cuenta mirando el número.
+test('diasDeDiferencia detecta una fuente que dejó de moverse', () => {
+  const hoy = new Date('2026-11-17T12:00:00Z');
+  assert.equal(diasDeDiferencia('2026-11-17', hoy), 0);
+  assert.equal(diasDeDiferencia('2026-11-16', hoy), 1);
+  assert.equal(diasDeDiferencia('2026-09-21', hoy), 57);
+  assert.equal(diasDeDiferencia(null, hoy), null);
+  assert.equal(diasDeDiferencia('ayer', hoy), null);
 });
 
 test('DXY: reproduce el valor esperado con las tasas del BCE', () => {

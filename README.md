@@ -78,44 +78,38 @@ de turno no la tiene. Es lo único que quedó en Actions y no toca datos.
 
 ### BROU y las unidades de cuenta
 
-El BROU **no se puede leer de su propio sitio**: `www.brou.com.uy/cotizaciones`
-responde 200, pero la tabla la arma el navegador y el HTML que llega por `fetch`
-no tiene ni un número ni JSON embebido. Se usa el espejo de `uy.dolarapi.com`,
-y la tarjeta dice que es un espejo. La fila que se toma es la que el BROU rotula
-sólo «Dólar» —no eBROU ni cable—, que ahí viene como moneda `USD`.
+El BROU se lee **del sitio del banco**, `www.brou.com.uy/cotizaciones`. De la
+pizarra se muestran **las dos puntas, sin promediarlas**, y cada una es su
+propia serie (`brouCompra` y `brouVenta`). El punto medio no lo publica el
+banco: es una cuenta sobre un spread de más de dos pesos y nadie opera a ese
+precio. La fila que se toma es la que dice sólo «Dólar»; «Dólar eBROU» es otra
+cotización, preferencial, y hay una prueba que fija que no se confundan. El BCU
+sí conserva su promedio, porque ahí las dos puntas difieren en 0,40 y el Central
+publica esa referencia.
 
-De la pizarra se muestran **las dos puntas, sin promediarlas**, y cada una es su
-propia serie (`brouCompra` y `brouVenta`). El punto medio no lo publica el banco:
-es una cuenta sobre un spread de más de dos pesos y nadie opera a ese precio. El
-BCU sí conserva su promedio, porque ahí las dos puntas difieren en 0,40 y el
-Central publica esa referencia.
+### El espejo que se murió sin avisar
 
-El espejo **relee la pizarra una vez por hora, al minuto :01**. Está medido, no
-deducido: el 2026-09-16 se leyó la fuente cada dos minutos durante 75 minutos y
-el sello saltó de `17:01:03.239` a `18:01:03.562` —3.600,3 segundos— mientras el
-valor no se movía. Es un reloj, no una reacción al cambio.
+Hasta noviembre de 2026 esto se leía de `uy.dolarapi.com`, porque el portal
+viejo del BROU armaba la tabla en el navegador y el HTML que llegaba por `fetch`
+no tenía ni un número. **Ese espejo se congeló el 2026-09-21** y durante 57 días
+siguió sirviendo la misma foto, con su propio sello detenido, como si fuera de
+hoy. El tablero la copió fielmente todo ese tiempo y `scripts/sondeo.mjs` la dio
+por buena en cada corrida, porque sólo comprobaba que el número llegara.
 
-De ahí sale el techo real del BROU: el tablero consulta cada 10 minutos, pero
-nueve de cada diez consultas releen un número idéntico, y un cambio del banco
-aparece en el tablero a las **:10 de alguna hora**. Entre 10 y 68 minutos de
-atraso según cuándo mueva. Verificado con un cambio real ese mismo día: el banco
-pasó la venta de 41,25 a 41,45, el espejo lo tomó a las 17:01 y el tablero lo
-publicó a las 17:10.
+Dos cosas cambiaron a partir de eso:
 
-Por eso el pie de la tarjeta dice **«leído»** y no la hora de la cotización: el
-sello que trae la fuente es cuándo miró el espejo, no cuándo movió el banco. La
-fuente no informa lo segundo.
+1. El banco rehízo su sitio y ahora sirve la tabla armada, así que se lee
+   directo y se dejó de depender de un intermediario.
+2. **Donde la fuente trae una fecha, se exige que esté al día.** El sondeo falla
+   si la página del BROU no es de hoy o ayer, o si el dólar del BCU lleva más de
+   seis días sin publicarse. Y `reunirDatos` marca la pizarra como `viejo`
+   cuando la página está vieja: la tarjeta muestra el último valor publicado
+   pero dice en ámbar desde cuándo no se mueve, y ese punto **no entra a la
+   serie**, para que el histórico no se llene de un número repetido que haría
+   parecer que la pizarra estuvo quieta dos meses.
 
-Se buscó algo mejor y no hay. Al portlet de Liferay que tiene la tabla
-(`cotizacionfull_WAR_broutmfportlet`) se le pidieron las cuatro variantes que
-Liferay sirve —`p_p_state=exclusive`, `p_p_isolated=1` y dos de
-`p_p_lifecycle=2`— y ninguna trae un número; su JS propio pesa 1.684 bytes y no
-tiene ninguna URL adentro. De los otros espejos, `dolar.uy`, `preciodolar` y
-`ebrou` no resuelven, `cambio.uy` está en construcción y `cotizaciones.com.uy`
-sirve un captcha. Un navegador headless sí leería la página, pero no cabe en una
-función de Netlify de 30 segundos: obligaría a un segundo proceso en Actions,
-cuyos horarios ya fallaron 2 de 2 veces. Mucho aparato para una pizarra que se
-mueve un par de veces por día.
+Una fuente que responde 200 y parsea bien puede estar muerta. Es el modo de
+falla que no se ve mirando el número, y es el que nos pasó.
 
 La **UI** y la **UR** las calcula el INE, pero el INE no publica ningún endpoint
 consultable (su sitio ni siquiera resuelve desde un runner). El BCU las

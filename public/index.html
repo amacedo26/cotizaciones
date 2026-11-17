@@ -208,8 +208,7 @@
     <br>
     Oro y plata: gold-api.com · Divisas y DXY: Swissquote · Brasil: fxratesapi.com ·
     Uruguay: Banco Central (dólar, UI y UR; se publica por día hábil) y la pizarra
-    del BROU —sus dos puntas, sin promediarlas— vía uy.dolarapi.com, que la relee
-    una vez por hora · Argentina: dolarapi.com, contrastado con
+    del BROU —sus dos puntas, sin promediarlas— leída de brou.com.uy · Argentina: dolarapi.com, contrastado con
     bluelytics.com.ar.
     <br>
     La UI y la UR las calcula el INE; se leen del servicio del Banco Central.
@@ -792,14 +791,17 @@
       '<div class="nombre">Banco República (BROU)</div>' +
       '<div class="pizarra">' + ladoBrou('Compra', bk.compra) + ladoBrou('Venta', bk.venta) + '</div>' +
       '<div class="unidad">pesos por dólar · pizarra del banco</div>' +
-      // El sello que trae la fuente NO es cuándo movió el banco: es cuándo el
-      // espejo leyó la pizarra. Medido el 2026-09-16 con 38 lecturas seguidas:
-      // relee al minuto :01 de cada hora, en punto, cambie o no el valor.
-      '<div class="pie">' + (bk.estado === 'ok'
-        ? ('espejo de ' + (bk.fuente || '') +
-           (bk.fecha ? ' · leído ' + reloj(bk.fecha) : '') +
-           ' · relee la pizarra una vez por hora')
-        : ('<span class="viejo">no se pudo leer: ' + (bk.error || bk.estado) + '</span>')) + '</div>';
+      // Tres estados, no dos. "viejo" es el que faltaba: la página responde,
+      // los números parsean, y sin embargo la fuente dejó de moverse. Pasó
+      // durante 57 días con el espejo anterior y en pantalla no se notaba.
+      '<div class="pie">' + (
+        bk.estado === 'ok'
+          ? ((bk.fuente || '') + (bk.fecha ? ' · página del ' + reloj(bk.fecha) : ''))
+        : bk.estado === 'viejo'
+          ? ('<span class="viejo">' + (bk.error || 'la página del banco no se actualiza') +
+             '</span> — el valor de abajo es el último que publicó')
+          : ('<span class="viejo">no se pudo leer: ' + (bk.error || bk.estado) + '</span>')
+      ) + '</div>';
 
     // Unidades de cuenta. Las calcula el INE; se leen del servicio del BCU,
     // que es el único que las publica en un formato que se puede consultar.

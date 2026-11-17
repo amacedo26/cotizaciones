@@ -9,7 +9,8 @@
 // Desde acá no se puede: hay que correrlo desde una IP con salida a internet
 // (workflow "Explorar fuentes" en Actions, cambiando el script que ejecuta).
 
-import { interpretarSwissquote, interpretarBcu, interpretarBrou, interpretarDolarApi, calcularDxy,
+import { interpretarSwissquote, interpretarBcu, interpretarPizarraBrou, diasDeDiferencia,
+         interpretarDolarApi, calcularDxy,
          UYU_MIN, UYU_MAX, UI_MIN, UI_MAX, UR_MIN, UR_MAX } from '../lib/parseo.mjs';
 
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
@@ -95,6 +96,8 @@ async function bcuMoneda(moneda, dias, banda) {
 
 await revisar('BCU dólar uruguayo', true, async () => {
   const r = await bcuMoneda(2225, 10, { min: UYU_MIN, max: UYU_MAX });
+  // Se publica por día hábil: un fin de semana largo con feriado da 4 días.
+  exigirFresca('BCU', r.fecha, 6);
   return `${r.promedio} UYU  (${r.fecha})`;
 });
 
@@ -108,12 +111,24 @@ await revisar('BCU unidad reajustable (UR)', true, async () => {
   return `${r.promedio} UYU  (${r.fecha})`;
 });
 
-await revisar('BROU (espejo uy.dolarapi)', true, async () => {
-  const { cuerpo, estado, ok } = await pedir('https://uy.dolarapi.com/v1/cotizaciones');
+// Una fuente puede responder 200, parsear bien y estar muerta. Pasó: el espejo
+// uy.dolarapi se congeló el 2026-09-21 y durante 57 días este sondeo lo dio por
+// bueno, porque sólo miraba que el número llegara. Ahora, donde la fuente trae
+// una fecha, se exige que esté al día.
+function exigirFresca(etiqueta, fecha, diasTolerados) {
+  const dias = diasDeDiferencia(fecha, new Date());
+  if (dias === null) throw new Error(`${etiqueta}: sin fecha, no se puede saber si está al día`);
+  if (dias > diasTolerados) throw new Error(`${etiqueta}: la fuente está detenida desde el ${fecha}, hace ${dias} días`);
+  return dias;
+}
+
+await revisar('BROU (pizarra del banco)', true, async () => {
+  const { cuerpo, estado, ok } = await pedir('https://www.brou.com.uy/cotizaciones');
   if (!ok) throw new Error(`HTTP ${estado}`);
-  const r = interpretarBrou(JSON.parse(cuerpo));
+  const r = interpretarPizarraBrou(cuerpo);
   if (r.estado !== 'ok') throw new Error(r.error);
-  return `${r.compra} / ${r.venta}  (medio ${r.promedio})`;
+  exigirFresca('BROU', r.fechaPagina, 1);
+  return `${r.compra} / ${r.venta}  (página del ${r.fechaPagina})`;
 });
 
 await revisar('Brasil (fxratesapi)', true, async () => {
